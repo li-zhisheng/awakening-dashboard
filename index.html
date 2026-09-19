@@ -57,6 +57,41 @@
   .status-chip b{display:block;color:var(--txt);font-size:14px;margin:3px 0}
   .status-chip.warn{border-color:rgba(251,191,36,.45)}
   .status-chip.bad{border-color:rgba(248,113,113,.5)}
+  /* action plan */
+  .plan-card{border:1px solid #2c4162;border-radius:16px;margin-bottom:18px;
+    background:linear-gradient(105deg,#10243de8,#151d35d9 55%,#201c39bd);
+    padding:18px 22px;position:relative;overflow:hidden}
+  .plan-card::after{content:"";position:absolute;top:0;left:0;width:30%;height:2px;
+    background:linear-gradient(90deg,#67e8f9,#a78bfa,transparent);
+    box-shadow:0 0 14px #22d3ee}
+  .plan-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .plan-head h3{font-size:16px;letter-spacing:1px}
+  .plan-badge{font-size:11px;border:1px solid #375471;border-radius:20px;padding:3px 10px;
+    color:#adccdf;background:#12253980}
+  .plan-badge.ensemble{color:#f0abfc;border-color:rgba(232,121,249,.5)}
+  .plan-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:11px}
+  .plan-order{background:rgba(13,22,42,.7);border:1px solid var(--border);border-radius:11px;
+    padding:12px 14px;font-size:12px;line-height:1.8;transition:.2s var(--ease)}
+  .plan-order:hover{border-color:rgba(103,232,249,.5);transform:translateY(-2px)}
+  .plan-order .po-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .plan-order .slot-tag{font-size:10px;font-weight:800;color:#0a0f1e;background:linear-gradient(90deg,#67e8f9,#818cf8);
+    border-radius:5px;padding:1px 7px}
+  .plan-order .po-name{font-weight:700;font-size:13px}
+  .plan-order .po-code{color:var(--sub);font-size:11px}
+  .plan-order .po-line{color:#9eb1cf}
+  .plan-order .po-line b{color:#fcd34d;font-weight:600}
+  .plan-order .votes{color:#f0abfc;font-size:11px}
+  .plan-sub{margin-top:14px}
+  .plan-sub h4,.plan-exit h4,.plan-risk h4{font-size:12px;color:var(--sub);margin-bottom:8px;font-weight:600}
+  .alt-chips{display:flex;gap:10px;flex-wrap:wrap}
+  .alt-chip{font-size:11px;background:#0e172a;border:1px solid var(--border);border-radius:8px;padding:6px 11px;color:#9eb1cf}
+  .plan-cols{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:18px;margin-top:16px}
+  .plan-exit .ex-row{display:flex;gap:10px;font-size:12px;color:#9eb1cf;line-height:1.8;
+    padding:5px 0;border-bottom:1px dashed #1d2a45}
+  .plan-exit .ex-date{color:#67e8f9;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .plan-risk ul{list-style:none;font-size:12px;color:#9eb1cf;line-height:2}
+  .plan-risk li::before{content:"◆";color:#f472b6;margin-right:7px;font-size:10px}
+  @media (max-width:900px){.plan-cols{grid-template-columns:1fr}}
   /* toolbar */
   .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
   .toolbar .grp{display:flex;background:var(--panel);border:1px solid var(--border);border-radius:9px;overflow:hidden}
@@ -282,7 +317,7 @@
     <div class="hero-tags"><span>真实 OHLC</span><span>双场次追踪</span><span>D+1 / 3 / 5</span><span>纸面评估</span></div>
   </div>
   <div class="workflow" aria-label="北京时间计划任务">
-    <div><b>08:45</b>盘前定案</div><div><b>11:32</b>午盘选股</div>
+    <div><b>08:15</b>盘前定案</div><div><b>11:31</b>午盘选股</div>
     <div><b>15:06</b>盘后结算</div>
   </div>
 </div>
@@ -290,6 +325,8 @@
 <div class="kpis" id="kpis"></div>
 <div class="notice" id="notice"></div>
 <div class="system-status" id="system-status"></div>
+
+<div id="plan-wrap"></div>
 
 <div class="toolbar">
   <span class="lbl">选股场次</span>
@@ -301,6 +338,7 @@
   <div class="grp" id="basis-grp">
     <button data-b="open" class="on">开盘价买入</button>
     <button data-b="close">收盘价买入</button>
+    <button data-b="executed">可成交净收益</button>
   </div>
   <span class="lbl">对比指标</span>
   <div class="grp" id="metric-grp">
@@ -349,6 +387,10 @@
     <div class="desc">全名单诊断：早盘展示开盘跳空、当日O→C与振幅；午盘入场价固定为上午收盘价，展示固定价至当日收盘的涨幅。</div>
     <div class="chart" id="execChart"></div></div>
 
+  <div class="card span2"><h3 id="fill-title">槽位填充率（最近批次 · 5只实际买到几只）</h3>
+    <div class="desc">涨停封死/未回到挂单价会导致槽位空转——理论收益再高，买不到也不赚钱。柱高=已成交槽位数/5。</div>
+    <div class="chart" id="fillChart"></div></div>
+
   <div class="card span2"><h3 id="box-title">收益分布箱线图</h3>
     <div class="desc">箱体=Q1–Q3，中线=中位数，须=最小/最大</div><div class="chart" id="boxChart"></div></div>
 
@@ -367,7 +409,7 @@
 </div>
 
 <div class="foot">
-  ① 北京时间计划：早盘08:45用截至T-1数据选股，以真实开盘价评估；午盘11:32用上午截面选股，入场价固定为批次构建时的上午收盘价(11:30)评估（见逐股明细），不再抢13:00快照。D+n使用后续第n个交易日收盘价。<br>
+  ① 北京时间计划：早盘08:15用截至T-1数据选股（提前1小时应对Actions排队延迟），以真实开盘价评估；午盘11:31用上午截面选股，入场价固定为批次构建时的上午收盘价(11:30)评估（见逐股明细），不再抢13:00快照。D+n使用后续第n个交易日收盘价。<br>
   ② 缺少真实价格时留空。MFE=相对买入价最大浮盈，MAE=相对买入价最大跌幅；收盘口径与午盘固定价口径均不使用买入前的日内高低价。固定价的已知瑕疵是忽略午后开盘跳空。成本为统一估算，非券商成交记录。<br>
   ③ 全程纸面记录，不触发任何真实订单。数据来源：腾讯/新浪真实日K + 东方财富截面。
   <br>④ 正式排名使用独立上证指数交易日历与腾讯前复权行情；前复权包含供应商派息送转调整，未计个体股息税及到账时间，不等同现金总回报。参考数据缺失不进入正式排名。
@@ -492,7 +534,8 @@ function renderTable(){
     if(key.endsWith('.payoff')||key.endsWith('.ic'))
       return `<td class="${v==null?'na':''}">${v==null?'—':v}</td>`;
     const h=Number(key.split('.')[0].slice(1)),cell=buyCell(m,h);
-    return `<td title="${cell.batches||0}个完整批次 / ${cell.n||0}个股票观测；排除 ${cell.excluded_batches||0}批${cell.insufficient?'；不足20批，仅供观察':''}">${signed(v)}</td>`;
+    const ci=cell.bootstrap_ci?`；95%置信区间 ${(cell.bootstrap_ci.lo*100).toFixed(1)}%~${(cell.bootstrap_ci.hi*100).toFixed(1)}%，P(盈利)=${(cell.bootstrap_ci.p_positive*100).toFixed(0)}%`:'';
+    return `<td title="${cell.batches||0}个完整批次 / ${cell.n||0}个股票观测；排除 ${cell.excluded_batches||0}批${cell.insufficient?'；不足20批，仅供观察':''}${ci}">${signed(v)}</td>`;
   }
   const body='<tbody>'+rows.map((m,i)=>{
     const tds=cols.slice(1).map(c=>fmt(c[0],cellVal(m,c[0]),m)).join('');
@@ -537,9 +580,10 @@ function renderHoldings(){
     <th>跳空</th><th>振幅</th><th>${session==='am'?'当日O→C':'固定价→收盘'}</th>
     <th>D+1净</th><th>D+3净</th><th>D+5净</th></tr></thead>`;
   function retCell(r,h){
-    const x=r.paths?.[basis]?.[h];
+    const b=basis==='executed'?'open':basis;
+    const x=r.paths?.[b]?.[h];
     if(!x)return '<span class="na">—</span>';
-    if(!r.verified?.[basis]?.[h])return '<span class="na" title="缺少独立交易日历或复权数据，原始诊断不作为正式收益">待校正</span>';
+    if(!r.verified?.[b]?.[h])return '<span class="na" title="缺少独立交易日历或复权数据，原始诊断不作为正式收益">待校正</span>';
     const tip2=`title="前复权最大浮盈 ${pct(x[1],1)} 最大跌幅 ${pct(x[2],1)}；已扣估算往返成本"`;
     return `<span ${tip2}>${signed(net(x[0]))}</span>`;
   }
@@ -743,9 +787,82 @@ function renderCohorts(){
     return `<tr><td>${sTag}${c.entry?'<b>'+c.entry+'</b> <span class="na">(选股 '+c.date+')</span>':'<span class="na">'+c.date+' 待入场</span>'}</td>`+
     DATA.models.map(m=>{const x=c.models[m.key];
       if(!x)return '<td><span class="na">—</span></td>';
+      if(basis==='executed'){
+        const f=x.fills?.filled||0;
+        return `<td><span class="chip">成交 ${f}/5</span></td>`;
+      }
       const v=x.valid_by_basis?.[basis]||x.valid;
       return `<td><span class="chip">${x.picks}股 · 1/3/5:${v[1]}/${v[3]}/${v[5]}</span></td>`;
     }).join('')+'</tr>';}).join('')+'</tbody>';
+}
+
+/* action plan */
+function renderPlan(){
+  const wrap=document.getElementById('plan-wrap');
+  const p=DATA.action_plan;
+  // 计划只展示与当前场次一致的批次，避免早盘视图混入午盘计划。
+  if(!p||p.session!==session){wrap.innerHTML='';return;}
+  const sessLabel=p.session==='pm'?'午盘':'早盘';
+  const orders=p.orders.map(o=>`
+    <div class="plan-order">
+      <div class="po-top"><span class="slot-tag">槽${o.slot}</span>
+        <span class="po-name">${esc(o.name)}</span><span class="po-code">${esc(o.code)}</span></div>
+      <div class="po-line">${esc(o.window)}</div>
+      <div class="po-line">${esc(o.order)}</div>
+      ${o.ballots&&o.ballots.length?`<div class="votes">${o.ballots.length}个模型投票 · ${o.ballots.map(b=>esc(b.model)).join('/')}</div>`:''}
+    </div>`).join('');
+  const alts=p.alternates.map(a=>
+    `<span class="alt-chip">替${a.alt} ${esc(a.name)} ${esc(a.code)}${a.limit_up?' 涨停'+a.limit_up:''}</span>`).join('');
+  const exits=p.exits.map(e=>
+    `<div class="ex-row"><span class="ex-date">${e.date} ${e.time}</span><span>${esc(e.action)}</span></div>`).join('');
+  const risks=p.risk_rules.map(r=>`<li>${esc(r)}</li>`).join('');
+  wrap.innerHTML=`
+  <div class="plan-card">
+    <div class="plan-head">
+      <h3>明日操作计划 · ${sessLabel}</h3>
+      <span class="plan-badge ${p.source==='ensemble'?'ensemble':''}">来源：${esc(p.source==='ensemble'?'集成方案(Borda)':p.source)}</span>
+      <span class="plan-badge">入场交易日 ${p.trade_dates[0]}</span>
+      <span class="plan-badge">${esc(p.capital_rule)}</span>
+    </div>
+    <div class="plan-grid">${orders}</div>
+    ${p.alternates.length?`<div class="plan-sub"><h4>替补递补</h4><div class="alt-chips">${alts}</div></div>`:''}
+    <div class="plan-cols">
+      <div class="plan-exit"><h4>退出/核对时点</h4>${exits}</div>
+      <div class="plan-risk"><h4>风控纪律</h4><ul>${risks}</ul></div>
+    </div>
+  </div>`;
+}
+
+/* fill rate */
+function renderFillRate(){
+  const sCohorts=DATA.cohorts.filter(c=>c.session===session);
+  const c=sCohorts[sCohorts.length-1];
+  const ch=chart('fillChart');
+  const emptyGraphic=[{type:'text',left:'center',top:'middle',
+    style:{text:(session==='am'?'早盘':'午盘')+'暂无批次数据',fill:'#5b6b88',fontSize:14}}];
+  if(!c){ch.setOption({graphic:emptyGraphic},true);return;}
+  const vals=DATA.models.map(m=>{
+    const x=c.models[m.key];
+    const filled=x?.fills?.filled||0;
+    return {value:+(filled/5*100).toFixed(0),filled,slots:x?.slots||0};
+  });
+  ch.setOption({
+    animation:fxEnabled&&!reducedMotion.matches,
+    tooltip:{...tip,trigger:'axis',formatter:ps=>{
+      const p=Array.isArray(ps)?ps[0]:ps;
+      const d=p.data;
+      return `${esc(p.name)}<br/>成交 ${d.filled}/5 槽 · 槽位 ${d.slots}个`;}},
+    grid:baseGrid,
+    xAxis:{type:'category',data:names(),...axisStyle,axisLabel:{color:'#8b9bb8',rotate:25,fontSize:11}},
+    yAxis:{type:'value',max:100,name:'填充率%',...axisStyle},
+    series:[{type:'bar',barMaxWidth:26,data:vals,
+      label:{show:true,position:'top',color:'#8b9bb8',formatter:'{c}%'},
+      itemStyle:{borderRadius:[5,5,0,0],
+        color:new echarts.graphic.LinearGradient(0,0,0,1,[
+          {offset:0,color:'#22d3ee'},{offset:1,color:'#2563eb'}])}}]
+  },true);
+  document.getElementById('fill-title').textContent=
+    `槽位填充率 · ${session==='am'?'早盘':'午盘'} ${c.date}（5只实际买到几只）`;
 }
 
 /* refresh */
@@ -786,8 +903,8 @@ function renderAll(){
   if(!DATA)return;
   document.querySelector('#basis-grp [data-b="open"]').textContent=session==='pm'?'上午收盘固定价买入':'开盘价买入';
   document.querySelectorAll('.toolbar button').forEach(b=>b.setAttribute('aria-pressed',String(b.classList.contains('on'))));
-  renderKPIs();renderSystemStatus();renderTable();renderHoldings();renderBar();
-  renderWin();renderPath();renderExec();renderBox();renderNav();renderHeat();renderCohorts();
+  renderKPIs();renderSystemStatus();renderPlan();renderTable();renderHoldings();renderBar();
+  renderWin();renderPath();renderExec();renderFillRate();renderBox();renderNav();renderHeat();renderCohorts();
 }
 
 /* toolbar delegation */
