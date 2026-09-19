@@ -109,6 +109,11 @@
 <div class="notice" id="notice"></div>
 
 <div class="toolbar">
+  <span class="lbl">选股场次</span>
+  <div class="grp" id="session-grp">
+    <button data-s="am" class="on">早盘选股</button>
+    <button data-s="pm">午盘选股</button>
+  </div>
   <span class="lbl">入场口径</span>
   <div class="grp" id="basis-grp">
     <button data-b="open" class="on">开盘价买入</button>
@@ -116,7 +121,7 @@
   </div>
   <span class="lbl">对比指标</span>
   <div class="grp" id="metric-grp">
-    <button data-m="top4" class="on">实际买入Top4</button>
+    <button data-m="top5" class="on">实际买入Top5</button>
     <button data-m="exp">期望收益</button>
     <button data-m="win">胜率</button>
   </div>
@@ -131,7 +136,7 @@
 <div class="grid">
   <div class="card span2">
     <h3>总排名（点表头排序 · 点模型名看选股明细）</h3>
-    <div class="desc">“买入”=名单前4只(实际会买)的平均收益；期望=胜率×赚幅−败率×亏幅；RankIC越正=排前真的更好</div>
+    <div class="desc">“买入”=名单前5只(实际会买, 第5只兼作替补)的平均收益；期望=胜率×赚幅−败率×亏幅；RankIC越正=排前真的更好</div>
     <div class="table-wrap"><table id="rank-table"></table></div>
   </div>
 
@@ -173,15 +178,15 @@
 </div>
 
 <div class="foot">
-  ① 入场交易日＝批次日当日或之后首个真实交易日；开盘价口径以其真实开盘成交，D+n退出用第n个交易日收盘价。<br>
-  ② 未来交易日尚未发生时记为缺失，绝无模拟值；样本数见“批次数据覆盖”。MFE=窗口内最高价相对开盘浮盈，MAE=开盘相对最低价回撤。<br>
+  ① 每日两轮：早盘am盘前09:00用截至T-1真实日K定案，以入场日真实开盘成交；午盘pm在11:35用上午真实截面定案，以13:00真实快照价成交。D+n退出统一用第n个交易日收盘价。<br>
+  ② 未来交易日尚未发生时记为缺失，绝无模拟值；样本数见“批次数据覆盖”。MFE=窗口内最高价相对入场价浮盈，MAE=入场价相对最低价回撤；早盘含入场日，午盘仅计之后完整未来日。<br>
   ③ 全程纸面记录，不触发任何真实订单。数据来源：腾讯/新浪真实日K + 东方财富截面。
 </div>
 
 <script>
-let DATA=null, basis='open', metric='top4', distH=5;
+let DATA=null, basis='open', metric='top5', distH=5, session='am';
 let selModel='', selCohort='';
-let sortKey='d5.top4', sortDir=-1;
+let sortKey='d5.top5', sortDir=-1;
 const charts={};
 
 function chart(id){
@@ -204,15 +209,16 @@ function pr(v,d=2){return v==null?'<span class="na">—</span>':Number(v).toFixe
 /* KPI */
 function renderKPIs(){
   const ms=DATA.models;
-  const latest=DATA.cohorts[DATA.cohorts.length-1];
-  const totalValid=ms.reduce((a,m)=>a+m.total_valid,0);
+  const sCohorts=DATA.cohorts.filter(c=>c.session===session);
+  const latest=sCohorts[sCohorts.length-1];
+  const totalValid=ms.reduce((a,m)=>a+(m[session]?m[session].total_valid:0),0);
   function leader(h){let best=null;
-    ms.forEach(m=>{const v=m[basis]['d'+h].top4;
+    ms.forEach(m=>{const v=m[session]?m[session][basis]['d'+h].top5:null;
       if(v!=null&&(!best||v>best.val))best={m,val:v};});return best;}
   const l1=leader(1),l3=leader(3),l5=leader(5);
   const cards=[
     {l:'参赛模型',v:ms.length,s:'10模型+系统+热榜'},
-    {l:'最新批次',v:latest?latest.entry||latest.date:'—',s:latest&&latest.entry?'入场交易日':'待入场'},
+    {l:'最新'+(session==='am'?'早盘':'午盘')+'批次',v:latest?latest.entry||latest.date:'—',s:latest?(session==='am'?'早盘':'午盘')+(latest.entry?' · 入场交易日':' · 待入场'):'暂无该场批次'},
     {l:'D+1 买入领先',v:l1?l1.m.name:'—',s:l1?(l1.val*100).toFixed(2)+'%':'暂无数据',c:l1?l1.m.color:'#8b9bb8'},
     {l:'D+3 买入领先',v:l3?l3.m.name:'—',s:l3?(l3.val*100).toFixed(2)+'%':'暂无数据',c:l3?l3.m.color:'#8b9bb8'},
     {l:'D+5 买入领先',v:l5?l5.m.name:'—',s:l5?(l5.val*100).toFixed(2)+'%':'暂无数据',c:l5?l5.m.color:'#8b9bb8'},
@@ -229,8 +235,8 @@ function renderKPIs(){
 
 /* rank table */
 function cellVal(m,key){
-  if(key.startsWith('d')){const[g,k]=key.split('.');return m[basis][g][k];}
-  if(key.startsWith('exec.'))return m[key.split('.')[0]][key.split('.')[1]];
+  if(key.startsWith('d')){const[g,k]=key.split('.');return m[session][basis][g][k];}
+  if(key.startsWith('exec.'))return m[session]['exec'][key.split('.')[1]];
   return m[key.split('.')[1]||key];
 }
 function sortRows(rows){
@@ -245,9 +251,9 @@ function renderTable(){
   const cols=[
     ['base.name','模型'],
     ['d5.n','样本'],
-    ['d1.top4','D+1·买入'],
-    ['d3.top4','D+3·买入'],
-    ['d5.top4','D+5·买入'],
+    ['d1.top5','D+1·买入'],
+    ['d3.top5','D+3·买入'],
+    ['d5.top5','D+5·买入'],
     ['d5.exp','D+5·期望'],
     ['d5.win','D+5·胜率'],
     ['d5.payoff','D+5·盈亏比'],
@@ -276,16 +282,19 @@ function renderTable(){
 }
 
 /* holdings detail */
+function dirSession(d){return d.endsWith('pm')?'pm':'am';}
 function renderHoldHead(){
-  const cohorts=Object.keys(DATA.holdings).sort();
-  if(!cohorts.includes(selCohort))selCohort=cohorts[cohorts.length-1];
+  const allCohorts=Object.keys(DATA.holdings).sort();
+  const cohorts=allCohorts.filter(d=>dirSession(d)===session);
+  if(!cohorts.includes(selCohort))selCohort=cohorts[cohorts.length-1]||'';
   const models=DATA.models;
   if(!models.some(m=>m.key===selModel))selModel=models[0]?models[0].key:'';
   const m=models.find(x=>x.key===selModel);
+  const sessLabel=session==='am'?'早盘':'午盘';
   document.getElementById('hold-head').innerHTML=`
     <select id="hold-model">${models.map(x=>`<option value="${x.key}" ${x.key===selModel?'selected':''}>${x.name}</option>`).join('')}</select>
-    <select id="hold-cohort">${cohorts.map(c=>`<option value="${c}" ${c===selCohort?'selected':''}>批次 ${c}</option>`).join('')}</select>
-    <span class="pill">入场: ${basis==='open'?'开盘价':'收盘价'}</span>
+    <select id="hold-cohort">${cohorts.map(c=>`<option value="${c}" ${c===selCohort?'selected':''}>${sessLabel} ${c}</option>`).join('')}</select>
+    <span class="pill">${sessLabel} · 入场: ${basis==='open'?'开盘价':'收盘价'}</span>
     <span class="pill" style="${m&&m.color?'color:'+m.color:''}">${m?m.name:''}</span>`;
   document.getElementById('hold-model').onchange=e=>{selModel=e.target.value;renderHoldings();};
   document.getElementById('hold-cohort').onchange=e=>{selCohort=e.target.value;renderHoldings();};
@@ -337,7 +346,7 @@ function renderBar(){
   const series=[1,3,5].map(h=>({
     name:'D+'+h,type:'bar',barMaxWidth:22,
     data:DATA.models.map(m=>{
-      const v=m[basis]['d'+h][metric==='win'?'win':metric];
+      const v=m[session][basis]['d'+h][metric==='win'?'win':metric];
       return {value:v==null?null:+(v*100).toFixed(2)};})
   }));
   chart('barChart').setOption({
@@ -350,12 +359,12 @@ function renderBar(){
     series
   },true);
   document.getElementById('bar-title').textContent=
-    '三周期'+({top4:'实际买入Top4收益',exp:'期望收益',win:'胜率'})[metric]+'对比';
+    (session==='am'?'早盘':'午盘')+'三周期'+({top5:'实际买入Top5收益',exp:'期望收益',win:'胜率'})[metric]+'对比';
 }
 function renderWin(){
   const series=[1,3,5].map(h=>({
     name:'D+'+h,type:'bar',barMaxWidth:22,
-    data:DATA.models.map(m=>{const v=m[basis]['d'+h].win;
+    data:DATA.models.map(m=>{const v=m[session][basis]['d'+h].win;
       return {value:v==null?null:+(v*100).toFixed(1)};}),
     markLine:h===1?{silent:true,symbol:'none',
       data:[{yAxis:50,lineStyle:{color:'#f6465d',type:'dashed'},label:{color:'#f6465d',formatter:'50%'}}]}:undefined
@@ -373,7 +382,7 @@ function renderWin(){
 
 /* path: MFE / final / MAE */
 function renderPath(){
-  const c=m=>{const x=m[basis]['d'+distH];
+  const c=m=>{const x=m[session][basis]['d'+distH];
     return [x.mfe==null?null:+(x.mfe*100).toFixed(2),
             x.mean==null?null:+(x.mean*100).toFixed(2),
             x.mae==null?null:+(-x.mae*100).toFixed(2)];};
@@ -392,29 +401,29 @@ function renderPath(){
     ]
   },true);
   document.getElementById('path-title').textContent=
-    `盈亏路径 D+${distH}：最大浮盈 / 最终收益 / 最大回撤`;
+    (session==='am'?'早盘':'午盘')+`盈亏路径 D+${distH}：最大浮盈 / 最终收益 / 最大回撤`;
 }
 
 /* entry execution quality */
 function renderExec(){
-  const g=(k)=>DATA.models.map(m=>{const v=m.exec[k];return v==null?null:+(v*100).toFixed(2);});
+  const g=(k)=>DATA.models.map(m=>{const v=m[session]['exec'][k];return v==null?null:+(v*100).toFixed(2);});
+  const seriesDef=session==='am'
+    ?[['开盘跳空','gap','#818cf8'],['当日O→C','oc','#fb7185'],['振幅','amp','#fbbf24']]
+    :[['午后跳空(相对上午收)','gap','#818cf8'],['13:00→当日收','oc','#fb7185']];
   chart('execChart').setOption({
     tooltip:{trigger:'axis',...tip,valueFormatter:v=>v==null?'—':v+'%'},
     legend:{top:6,textStyle:{color:'#8b9bb8'}},
     grid:baseGrid,
     xAxis:{type:'category',data:names(),...axisStyle},
     yAxis:{type:'value',name:'%',...axisStyle},
-    series:[
-      {name:'开盘跳空',type:'bar',data:g('gap'),itemStyle:{color:'#818cf8'},barMaxWidth:18},
-      {name:'当日O→C',type:'bar',data:g('oc'),itemStyle:{color:'#fb7185'},barMaxWidth:18},
-      {name:'振幅',type:'bar',data:g('amp'),itemStyle:{color:'#fbbf24'},barMaxWidth:18}
-    ]
+    series:seriesDef.map(([nm,k,col])=>(
+      {name:nm,type:'bar',data:g(k),itemStyle:{color:col},barMaxWidth:22}))
   },true);
 }
 
 /* boxplot */
 function renderBox(){
-  const data=DATA.models.map(m=>m[basis]['d'+distH].box||[]);
+  const data=DATA.models.map(m=>m[session][basis]['d'+distH].box||[]);
   const valid=data.some(d=>d.length);
   chart('boxChart').setOption({
     tooltip:{trigger:'item',...tip,formatter:p=>{
@@ -436,8 +445,9 @@ function renderBox(){
 
 /* nav */
 function renderNav(){
-  const c=DATA.curves['5'][basis];
-  const xDates=c.dates.map((d,i)=>{const co=DATA.cohorts[i];return co&&co.entry?co.entry:d;});
+  const c=DATA.curves['5'][basis+session];
+  const sCohorts=DATA.cohorts.filter(cc=>cc.session===session);
+  const xDates=c.dates.map((d,i)=>{const co=sCohorts[i];return co&&co.entry?co.entry:d;});
   const series=DATA.models.map(m=>({
     name:m.name,type:'line',smooth:true,showSymbol:true,symbolSize:6,
     lineStyle:{width:2,color:m.color},itemStyle:{color:m.color},
@@ -455,11 +465,12 @@ function renderNav(){
 
 /* heatmap */
 function renderHeat(){
-  const ov=DATA.overlap;
+  const ov=DATA['overlap_'+session];
   const nm=k=>(DATA.models.find(m=>m.key===k)||{name:k}).name;
   const nms=ov.keys.map(nm);
   const data=[];
   ov.matrix.forEach((row,i)=>row.forEach((v,j)=>data.push([j,i,+(v*100).toFixed(0)])));
+  const has=nms.length>0;
   chart('heatChart').setOption({
     tooltip:{...tip,formatter:p=>`${nms[p.value[1]]} × ${nms[p.value[0]]}<br/>重叠 ${p.value[2]}%`},
     grid:{left:70,right:30,top:20,bottom:80,containLabel:true},
@@ -468,25 +479,28 @@ function renderHeat(){
     visualMap:{min:0,max:100,calculable:true,orient:'horizontal',left:'center',bottom:8,
       textStyle:{color:'#8b9bb8'},
       inRange:{color:['#16233f','#2563eb','#22d3ee','#fbbf24','#f6465d']}},
-    series:[{type:'heatmap',data,label:{show:true,color:'#e5ecf7',fontSize:9,
+    series: has?[{type:'heatmap',data,label:{show:true,color:'#e5ecf7',fontSize:9,
       formatter:p=>p.value[2]===100?'1':(p.value[2]/100).toFixed(1)},
-      emphasis:{itemStyle:{shadowBlur:8}}}]
+      emphasis:{itemStyle:{shadowBlur:8}}}]:[],
+    graphic: has?[]:[{type:'text',left:'center',top:'middle',
+      style:{text:(session==='am'?'早盘':'午盘')+'暂无批次数据',fill:'#5b6b88',fontSize:14}}]
   },true);
   document.getElementById('heat-title').textContent=
-    '持仓重叠热力图（'+(ov.date||'—')+'批次 · Jaccard）';
+    (session==='am'?'早盘':'午盘')+'持仓重叠热力图（'+(ov.date||'—')+'批次 · Jaccard）';
 }
 
 /* cohorts */
 function renderCohorts(){
   const t=document.getElementById('cohort-table');
   t.innerHTML='<thead><tr><th>批次 / 入场</th>'+DATA.models.map(m=>`<th>${m.name}</th>`).join('')+'</tr></thead>'+
-  '<tbody>'+DATA.cohorts.map(c=>
-    `<tr><td>${c.entry?'<b>'+c.entry+'</b> <span class="na">(选股 '+c.date+')</span>':'<span class="na">'+c.date+' 待入场</span>'}</td>`+
+  '<tbody>'+DATA.cohorts.map(c=>{
+    const sTag=c.session==='pm'?'<span style="color:#fb7185;font-weight:700">[午]</span> ':'<span style="color:#67e8f9">[早]</span> ';
+    return `<tr><td>${sTag}${c.entry?'<b>'+c.entry+'</b> <span class="na">(选股 '+c.date+')</span>':'<span class="na">'+c.date+' 待入场</span>'}</td>`+
     DATA.models.map(m=>{const x=c.models[m.key];
       if(!x)return '<td><span class="na">—</span></td>';
       const v=x.valid;
       return `<td><span class="chip">${x.picks}股 · 1/3/5:${v[1]}/${v[3]}/${v[5]}</span></td>`;
-    }).join('')+'</tr>').join('')+'</tbody>';
+    }).join('')+'</tr>';}).join('')+'</tbody>';
 }
 
 /* refresh */
@@ -510,6 +524,12 @@ function renderAll(){
 }
 
 /* toolbar delegation */
+document.getElementById('session-grp').onclick=e=>{
+  const b=e.target.closest('button');if(!b)return;session=b.dataset.s;
+  document.querySelectorAll('#session-grp button').forEach(x=>x.classList.toggle('on',x===b));
+  selCohort='';   // 切场次后明细批次默认取该场最新
+  renderAll();
+};
 document.getElementById('basis-grp').onclick=e=>{
   const b=e.target.closest('button');if(!b)return;basis=b.dataset.b;
   document.querySelectorAll('#basis-grp button').forEach(x=>x.classList.toggle('on',x===b));
@@ -528,7 +548,8 @@ document.getElementById('horizon-grp').onclick=e=>{
 /* rank table: click model name → holdings */
 document.getElementById('rank-table').addEventListener('click',e=>{
   const el=e.target.closest('.mlink');if(!el)return;
-  selModel=el.dataset.model;selCohort=Object.keys(DATA.holdings).sort().pop();
+  selModel=el.dataset.model;
+  selCohort=Object.keys(DATA.holdings).filter(d=>dirSession(d)===session).sort().pop()||'';
   renderHoldings();
   document.getElementById('hold-table').scrollIntoView({behavior:'smooth',block:'center'});
 });
