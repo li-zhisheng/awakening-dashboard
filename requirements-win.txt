@@ -1,7 +1,0 @@
-# Windows 额外依赖（实盘交易链路需要，macOS 不装）
-# 安装: pip install -r requirements-win.txt
-
-pywinauto>=0.6.8
-easytrader>=0.20.0
-pywin32>=305
-Pillow>=9.0.0
