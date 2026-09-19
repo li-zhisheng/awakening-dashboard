@@ -347,7 +347,7 @@
 
   <div class="card span2">
     <h3>批次数据覆盖</h3>
-    <div class="desc">每批次每模型 选股数 / 各周期已取到真实收盘的样本数（随交易日自动填充）</div>
+    <div class="desc">全部场次批次：每模型选股数 / 当前入场口径下 D+1/3/5 全名单有效样本数（随交易日自动填充）</div>
     <div class="table-wrap"><table class="cohorts-tbl" id="cohort-table"></table></div>
   </div>
 </div>
@@ -474,7 +474,8 @@ function renderTable(){
   }
   const body='<tbody>'+rows.map((m,i)=>{
     const tds=cols.slice(1).map(c=>fmt(c[0],cellVal(m,c[0]))).join('');
-    const measured=[1,3,5].some(h=>(buyCell(m,h).n||0)>0);
+    const sortH=sortKey.startsWith('d')?Number(sortKey.split('.')[0].slice(1)):null;
+    const measured=sortH!==null&&(buyCell(m,sortH).n||0)>0&&cellVal(m,sortKey)!=null;
     return `<tr class="${measured&&i<3?'podium':''}"><td><span class="rank-no">${measured?i+1:'—'}</span>
       <span class="mname"><i style="background:${m.color}"></i>
       <button class="mlink" style="border:0;background:none;font:inherit" data-model="${esc(m.key)}">${esc(m.name)}</button></span></td>${tds}</tr>`;
@@ -667,7 +668,7 @@ function renderNav(){
   }));
   chart('navChart').setOption({
     animation:fxEnabled&&!reducedMotion.matches,
-    tooltip:{trigger:'axis',...tip,valueFormatter:v=>v>=0?`+${v}%`:`${v}%`},
+    tooltip:{trigger:'axis',...tip,valueFormatter:v=>v==null?'—':v>=0?`+${v}%`:`${v}%`},
     legend:{top:6,type:'scroll',textStyle:{color:'#8b9bb8'}},
     grid:{...baseGrid,top:50},
     xAxis:{type:'category',data:xDates,...axisStyle},
@@ -713,7 +714,7 @@ function renderCohorts(){
     return `<tr><td>${sTag}${c.entry?'<b>'+c.entry+'</b> <span class="na">(选股 '+c.date+')</span>':'<span class="na">'+c.date+' 待入场</span>'}</td>`+
     DATA.models.map(m=>{const x=c.models[m.key];
       if(!x)return '<td><span class="na">—</span></td>';
-      const v=x.valid;
+      const v=x.valid_by_basis?.[basis]||x.valid;
       return `<td><span class="chip">${x.picks}股 · 1/3/5:${v[1]}/${v[3]}/${v[5]}</span></td>`;
     }).join('')+'</tr>';}).join('')+'</tbody>';
 }
