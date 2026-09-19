@@ -283,7 +283,7 @@
   </div>
   <div class="workflow" aria-label="北京时间计划任务">
     <div><b>08:45</b>盘前定案</div><div><b>11:32</b>午盘选股</div>
-    <div><b>12:45</b>预热待采</div><div><b>15:06</b>盘后结算</div>
+    <div><b>15:06</b>盘后结算</div>
   </div>
 </div>
 
@@ -346,7 +346,7 @@
     <div class="chart" id="pathChart"></div></div>
 
   <div class="card span2"><h3>入场执行质量</h3>
-    <div class="desc">全名单诊断：早盘展示开盘跳空、当日O→C与振幅；午盘展示实际快照相对上午收盘的跳空及至收盘涨幅。</div>
+    <div class="desc">全名单诊断：早盘展示开盘跳空、当日O→C与振幅；午盘入场价固定为上午收盘价，展示固定价至当日收盘的涨幅。</div>
     <div class="chart" id="execChart"></div></div>
 
   <div class="card span2"><h3 id="box-title">收益分布箱线图</h3>
@@ -367,8 +367,8 @@
 </div>
 
 <div class="foot">
-  ① 北京时间计划：早盘08:55用截至T-1数据选股，以真实开盘价评估；午盘11:32用上午截面选股，以午后实际采集时间的快照价评估（见逐股明细）。D+n使用后续第n个交易日收盘价。<br>
-  ② 缺少真实价格时留空。MFE=相对买入价最大浮盈，MAE=相对买入价最大跌幅；收盘口径与午盘快照口径均不使用买入前的日内高低价。成本为统一估算，非券商成交记录。<br>
+  ① 北京时间计划：早盘08:45用截至T-1数据选股，以真实开盘价评估；午盘11:32用上午截面选股，入场价固定为批次构建时的上午收盘价(11:30)评估（见逐股明细），不再抢13:00快照。D+n使用后续第n个交易日收盘价。<br>
+  ② 缺少真实价格时留空。MFE=相对买入价最大浮盈，MAE=相对买入价最大跌幅；收盘口径与午盘固定价口径均不使用买入前的日内高低价。固定价的已知瑕疵是忽略午后开盘跳空。成本为统一估算，非券商成交记录。<br>
   ③ 全程纸面记录，不触发任何真实订单。数据来源：腾讯/新浪真实日K + 东方财富截面。
   <br>④ 正式排名使用独立上证指数交易日历与腾讯前复权行情；前复权包含供应商派息送转调整，未计个体股息税及到账时间，不等同现金总回报。参考数据缺失不进入正式排名。
 </div>
@@ -520,7 +520,7 @@ function renderHoldHead(){
   document.getElementById('hold-head').innerHTML=`
     <select id="hold-model" aria-label="选股模型">${models.map(x=>`<option value="${esc(x.key)}" ${x.key===selModel?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
     <select id="hold-cohort" aria-label="选股批次">${cohorts.map(c=>`<option value="${esc(c)}" ${c===selCohort?'selected':''}>${sessLabel} ${esc(c)}</option>`).join('')}</select>
-    <span class="pill">${sessLabel} · 入场: ${basis==='open'?(session==='am'?'开盘价':'午后实际快照价'):'收盘价'}</span>
+    <span class="pill">${sessLabel} · 入场: ${basis==='open'?(session==='am'?'开盘价':'上午收盘固定价'):'收盘价'}</span>
     <span class="pill" style="${m&&m.color?'color:'+m.color:''}">${m?esc(m.name):''}</span>`;
   document.getElementById('hold-model').onchange=e=>{selModel=e.target.value;renderHoldings();};
   document.getElementById('hold-cohort').onchange=e=>{selCohort=e.target.value;renderHoldings();};
@@ -533,8 +533,8 @@ function renderHoldings(){
   const head=`<thead><tr>
     <th>名单</th><th>代码</th><th>名称</th>
     <th>信号日</th><th>信开</th><th>信高</th><th>信低</th><th>信收</th>
-    <th>入场日 / 采集时间</th><th>${session==='am'?'入开':'快照价'}</th><th>入高</th><th>入低</th><th>入收</th>
-    <th>跳空</th><th>振幅</th><th>${session==='am'?'当日O→C':'快照→收盘'}</th>
+    <th>入场日 / 采集时间</th><th>${session==='am'?'入开':'固定价'}</th><th>入高</th><th>入低</th><th>入收</th>
+    <th>跳空</th><th>振幅</th><th>${session==='am'?'当日O→C':'固定价→收盘'}</th>
     <th>D+1净</th><th>D+3净</th><th>D+5净</th></tr></thead>`;
   function retCell(r,h){
     const x=r.paths?.[basis]?.[h];
@@ -644,7 +644,7 @@ function renderExec(){
   const g=(k)=>DATA.models.map(m=>{const v=m[session]['exec'][k];return v==null?null:+(v*100).toFixed(2);});
   const seriesDef=session==='am'
     ?[['开盘跳空','gap','#818cf8'],['当日O→C','oc','#fb7185'],['振幅','amp','#fbbf24']]
-    :[['快照跳空(相对上午收)','gap','#818cf8'],['快照→当日收','oc','#fb7185']];
+    :[['固定价(上午收)→当日收','oc','#fb7185']];
   chart('execChart').setOption({
     animation:fxEnabled&&!reducedMotion.matches,
     tooltip:{trigger:'axis',...tip,valueFormatter:v=>v==null?'—':v+'%'},
@@ -772,12 +772,11 @@ async function refresh(){
 }
 function renderSystemStatus(){
   const st=DATA.status||{};
-  const entry=st.entry_coverage?.[0];
   const bar=st.bar_coverage?.[0];
   const job=st.jobs?.[0];
   const chips=[
     `<div class="status-chip"><span>数据库版本</span><b>R${st.revision||0}</b>日历截至 ${esc(DATA.market_reference?.calendar_through||'未就绪')}</div>`,
-    entry?`<div class="status-chip ${entry.coverage<1?'warn':''}"><span>入场覆盖 ${entry.date}</span><b>${(entry.coverage*100).toFixed(1)}%</b>${entry.stale_or_missing?Object.keys(entry.stale_or_missing).length+'只缺失/陈旧':'完整'}</div>`:'',
+    `<div class="status-chip"><span>午盘入场价</span><b>固定价</b>上午收盘11:30（忽略开盘跳空）</div>`,
     bar?`<div class="status-chip ${bar.missing?.length||bar.stale?.length?'warn':''}"><span>盘后K线 ${bar.expected_date}</span><b>${bar.ok_n}/${bar.target_n}</b>${bar.missing?.length||0}缺失 · ${bar.stale?.length||0}陈旧</div>`:'',
     job?`<div class="status-chip ${job.status==='success'?'':'bad'}"><span>最近作业</span><b>${esc(job.job)}</b>${esc(job.status)} · ${esc((job.finished_at||job.started_at).slice(0,19))}</div>`:'',
   ].filter(Boolean);
@@ -785,7 +784,7 @@ function renderSystemStatus(){
 }
 function renderAll(){
   if(!DATA)return;
-  document.querySelector('#basis-grp [data-b="open"]').textContent=session==='pm'?'午后快照买入':'开盘价买入';
+  document.querySelector('#basis-grp [data-b="open"]').textContent=session==='pm'?'上午收盘固定价买入':'开盘价买入';
   document.querySelectorAll('.toolbar button').forEach(b=>b.setAttribute('aria-pressed',String(b.classList.contains('on'))));
   renderKPIs();renderSystemStatus();renderTable();renderHoldings();renderBar();
   renderWin();renderPath();renderExec();renderBox();renderNav();renderHeat();renderCohorts();
