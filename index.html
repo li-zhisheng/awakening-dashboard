@@ -29,6 +29,7 @@
   .dot-live{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--down);
     margin-right:6px;animation:pulse 1.6s infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .dot-live.paused{background:#5a6a8a;animation:none;opacity:.8}
   /* kpi */
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:18px}
   .kpi{background:linear-gradient(160deg,var(--panel),var(--panel2));
@@ -99,7 +100,7 @@
     <span class="tag">10 大模型 vs 系统方案 vs 热榜100 · 真实盘中数据 · 只看数据说话</span>
   </div>
   <div class="meta">
-    <div><span class="dot-live"></span>实时刷新 · <span id="countdown">30</span>s</div>
+    <div><span class="dot-live" id="live-dot"></span><span id="live-label">实时刷新</span> · <span id="countdown">30</span>s</div>
     <div id="generated">—</div>
   </div>
 </div>
@@ -541,8 +542,26 @@ document.getElementById('rank-table').addEventListener('click',e=>{
   }
 });
 window.addEventListener('resize',()=>Object.values(charts).forEach(c=>c.resize()));
-let cd=30;setInterval(()=>{cd--;if(cd<=0){cd=30;refresh();}
-  document.getElementById('countdown').textContent=cd;},1000);
+const REFRESH_EVERY=30;
+let cd=REFRESH_EVERY;
+function setActive(on){
+  document.getElementById('live-dot').classList.toggle('paused',!on);
+  document.getElementById('live-label').textContent=on?'实时刷新':'已暂停(后台)';
+  document.getElementById('countdown').textContent=on?cd:'—';
+}
+setActive(!document.hidden);
+setInterval(()=>{
+  if(document.hidden){setActive(false);return;}
+  if(!document.getElementById('live-dot').classList.contains('paused')){
+    cd--;
+    if(cd<=0){cd=REFRESH_EVERY;refresh();}
+  }
+  setActive(true);
+  document.getElementById('countdown').textContent=cd;
+},1000);
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden){setActive(true);cd=1;}   // 回前台立即拉取
+});
 refresh();
 </script>
 </body>
