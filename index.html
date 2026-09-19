@@ -69,6 +69,14 @@
   .plan-badge{font-size:11px;border:1px solid #375471;border-radius:20px;padding:3px 10px;
     color:#adccdf;background:#12253980}
   .plan-badge.ensemble{color:#f0abfc;border-color:rgba(232,121,249,.5)}
+  .plan-badge.regime-weak{color:#ff8a93;border-color:rgba(246,70,93,.6);background:rgba(246,70,93,.12)}
+  .plan-badge.regime-strong{color:#7ef0b8;border-color:rgba(31,194,138,.6);background:rgba(31,194,138,.12)}
+  .plan-badge.regime-neutral{color:#ffd48a;border-color:rgba(245,185,69,.55);background:rgba(245,185,69,.1)}
+  .plan-badge.regime-unknown{color:#9fb4d4}
+  .regime-hint{font-size:12px;border-radius:9px;padding:8px 12px;margin:-4px 0 14px;
+    border:1px dashed #375471;color:#9fb4d4;background:rgba(13,22,42,.5)}
+  .regime-hint.regime-weak{color:#ffb3ba;border-color:rgba(246,70,93,.5);background:rgba(246,70,93,.08)}
+  .regime-hint.regime-strong{color:#a8f5d2;border-color:rgba(31,194,138,.5);background:rgba(31,194,138,.07)}
   .plan-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:11px}
   .plan-order{background:rgba(13,22,42,.7);border:1px solid var(--border);border-radius:11px;
     padding:12px 14px;font-size:12px;line-height:1.8;transition:.2s var(--ease)}
@@ -797,12 +805,19 @@ function renderCohorts(){
 }
 
 /* action plan */
+const REGIME_META={
+  weak:['弱势 · 控制仓位','regime-weak','指数在MA20下方且均线下行：弱势市场只打高确定性票，未成交不追、槽位宁可留现金'],
+  strong:['强势 · 可积极','regime-strong','指数在MA20上方且均线上行：强势市场按计划正常执行'],
+  neutral:['中性 · 按纪律','regime-neutral','指数与均线方向不一致：严格按计划与纪律执行'],
+  unknown:['环境待确认','regime-unknown','指数样本不足：按弱势谨慎处理']
+};
 function renderPlan(){
   const wrap=document.getElementById('plan-wrap');
   const p=DATA.action_plan;
   // 计划只展示与当前场次一致的批次，避免早盘视图混入午盘计划。
   if(!p||p.session!==session){wrap.innerHTML='';return;}
   const sessLabel=p.session==='pm'?'午盘':'早盘';
+  const [rlabel,rcls,rhint]=REGIME_META[DATA.regimes?.[p.cohort]]||REGIME_META.unknown;
   const orders=p.orders.map(o=>`
     <div class="plan-order">
       <div class="po-top"><span class="slot-tag">槽${o.slot}</span>
@@ -822,8 +837,10 @@ function renderPlan(){
       <h3>明日操作计划 · ${sessLabel}</h3>
       <span class="plan-badge ${p.source==='ensemble'?'ensemble':''}">来源：${esc(p.source==='ensemble'?'集成方案(Borda)':p.source)}</span>
       <span class="plan-badge">入场交易日 ${p.trade_dates[0]}</span>
+      <span class="plan-badge ${rcls}">市场环境：${esc(rlabel)}</span>
       <span class="plan-badge">${esc(p.capital_rule)}</span>
     </div>
+    <div class="regime-hint ${rcls}">${esc(rhint)}</div>
     <div class="plan-grid">${orders}</div>
     ${p.alternates.length?`<div class="plan-sub"><h4>替补递补</h4><div class="alt-chips">${alts}</div></div>`:''}
     <div class="plan-cols">
