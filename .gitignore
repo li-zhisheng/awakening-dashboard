@@ -1,0 +1,39 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# ===== 运行时状态（每台机器独立，禁止跨机器同步）=====
+positions.json
+positions_backup_*.json
+
+# ===== 日志与扫描产物 =====
+logs/
+screenshots/
+
+# ===== 敏感凭证 =====
+ths_cookie.txt
+*.cookie
+*.secret
+
+# ===== IDE / 编辑器 =====
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===== OS 噪音 =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 临时文件 =====
+*.tmp
+*.bak
+*.corrupt-*
+*.profraw

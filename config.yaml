@@ -1,0 +1,280 @@
+# 同花顺"多空趋势"信号采集器 MVP 配置
+# 区域坐标格式 [x1, y1, x2, y2]，基于手机真实分辨率像素标定
+# 标定方法: adb exec-out screencap -p > screen.png 后用画图工具量取
+
+device:
+  serial: ""                    # 为空自动使用第一台设备
+  adb_path: "C:/platform-tools/adb.exe"  # 为空使用PATH中的adb; 也可填绝对路径
+  screenshot_max_retries: 3
+
+paths:
+  stocks_file: stocks.txt
+  screenshots_dir: screenshots
+  logs_dir: logs
+
+regions:
+  title_region: [375, 120, 705, 264]      # 标题名称区(对应UI节点al_viewfilpper), 必须排除右侧"问财"机器人动画图标, 否则页面稳定检测永不通过
+  kline_region: [0, 700, 1080, 1700]      # K线主图+副图区域(避开底部动画推广位, 否则页面稳定检测永不通过)
+  latest_k_region: [960, 700, 1080, 1700] # 主图右缘整列(与主图等高): 多/空角标挂在最新K上下,
+                                          # K线处于低位时"多"角标y可达1500+, 原y上限1480导致漏检(002124案例)
+  title_code_region: [340, 205, 730, 252] # 标题代码行: 白色6位数字(h=31,y=213-244), 用于数字模板读码替代UI dump
+
+buttons:
+  next_stock: [747, 192]        # ">"按钮坐标, 已按UI树实测(al_rightbutton中心)
+  prev_stock: [333, 192]        # "<"按钮坐标(al_leftbutton中心)
+
+switch:
+  poll_interval: 0.2           # 未读到新代码时的轮询间隔
+                               # (切页等待上限已移至 monitor.scan_timeout)
+  post_tap_delay: 0.4          # 点击'>'后固定等待: 实测代码tap+0.35s即翻转、图表+1.0s内更新,
+                               # 确认帧(img2)内容时刻约tap+1.9s, 保留安全余量
+  confirm_gap: 0.1             # 新代码帧与确认帧的间隔(两次截图本身已间隔~0.7s)
+  jitter_min: 0.05             # tap前随机抖动下限
+  jitter_max: 0.12             # tap前随机抖动上限
+  max_switch_retries: 3        # 切换失败重试次数
+  loop_max_stocks: 150         # scan_loop默认上限, 必须>=自选股循环长度; --limit可覆盖
+
+detection:
+  template_threshold: 0.70     # 模板匹配置信度阈值(实测0.80会漏检0.71-0.79的真信号)
+  save_debug_screenshot: true
+  color_fallback: false         # 颜色兜底关闭(K线红绿柱体会误命中)
+
+goto_nav:                      # 搜索跳转导航(真机实测2026-09-06)
+  search_btn: [1008, 192]      # K线页顶栏搜索图标 new_title_search
+  input_box: [470, 186]        # 搜索页输入框 search_input
+  first_suggestion: [480, 320] # 首条联想结果行
+  kline_tab: [227, 664]        # 落页(分时)的日K tab (UI dump实测: bounds 156,616-298,712)
+  search_load_delay: 1.5
+  suggest_delay: 1.4
+  page_load_delay: 2.0
+  kline_load_delay: 1.2
+  max_retries: 2
+
+home_nav:                       # 回自选股列表导航(goto搜索后恢复<>循环上下文用)
+  back_delay: 1.0               # 每次返回后等待
+  tab_load_delay: 2.0           # 点底部'自选'tab后等列表
+  row_load_delay: 2.0           # 点股票行后等行情页
+  kline_load_delay: 1.2         # 切日K后等图表
+  max_back: 6
+
+watchlist:                      # 自选股云同步(把热榜自动推送到App"我的自选", 手机端云同步刷新)
+  sync_mode: cloud               # none=人工同步; cloud=Web接口自动同步(需下面Cookie)
+  cookie_file: ths_cookie.txt   # 浏览器登录 10jqka.com.cn 后复制的完整Cookie字符串(纯文本一行)
+  request_timeout: 10.0
+  keepalive_interval: 1800      # Cookie保活探测间隔(秒), 默认30分钟; 程序每30分钟访问一次同花顺续期sessionid
+  # 云同步删除护栏(2026-09-15用户裁定): 一轮整表替换中待删除自选股占现有
+  # 云自选比例超阈值时, 中止同步+CRITICAL告警(防Cookie失效/接口异常清空自选)
+  delete_guard_enable: true
+  delete_guard_max_pct: 0.30    # 待删除/现有>30%即中止(持仓股永不删除, 不受此限)
+  # 删除护栏两段式二次确认(2026-09-18采纳, 默认关): 超30%但不超hard_pct时,
+  # 等confirm_wait秒强制fresh重拉再比对, 差集<=max_diff只(瞬时抖动)才放行,
+  # 否则维持中止; 超hard_pct或重拉失败一律中止
+  delete_guard_confirm_enable: false
+  delete_guard_hard_pct: 0.60
+  delete_guard_confirm_wait: 45
+  delete_guard_confirm_max_diff: 2
+
+hot_list:
+  top_n: 100
+  fallback_file: logs/hotlist_local.json  # API失败兜底, 每轮成功后自动刷新
+  sync_mode: none              # none=App列表人工同步(每轮记录diff提醒); 官方同步接口确认后替换
+  round_interval: 300          # auto_round轮间隔(秒): 一轮结束后补足到该时长再开下一轮
+
+universe:                      # 交易标的过滤(热榜拉取后、云同步前生效, 不可交易股不进扫描)
+  enable: true
+  main_board_only: true        # 仅沪深主板(60/00开头): 排除688科创/300创业/8·4·920北交
+  exclude_st: true             # 排除ST/*ST
+  exclude_subnew: true         # 排除次新股
+  subnew_min_bars: 250         # 上市日K根数<250(≈1年)视为次新; 日K根数每日缓存一次
+  cache_file: logs/universe_cache.json
+  cache_ttl_hours: 20          # 次新缓存有效期(小时), 跨交易日自动刷新
+
+positions:
+  file: positions.json         # 持仓唯一事实源(PC侧); 人工买卖后点击
+                               # "人工买入/卖出校验.bat"主动对账同步
+  recheck_interval: 90         # 主轮中持仓插扫间隔(秒)
+  idle_recheck_interval: 120   # 轮间等待期持仓巡检间隔(秒, 0=关闭轮间巡检)
+  max_positions: 4             # 最大持仓只数(分批仓位): 满仓后不开新仓,
+                               # 全量检索持续进行, 多头信号仅记录时间+现价
+                               # (full_signal事件+当日一次告警), 不执行交易
+  # 持仓浮亏只读告警(2026-09-18采纳): 浮亏达10% WARNING/15% CRITICAL,
+  # 每股每档当日去重, 只告警不自动卖; 现价查询失败跳过
+  loss_alert_enable: true
+  loss_warn_pct: -0.10
+  loss_critical_pct: -0.15
+
+execution:
+  mode: paper                  # paper=纸面(更新持仓+告警), auto=真实下单
+  channel: hotkey              # auto时下单通道: hotkey=行情端快捷键闪电下单(推荐), form=xiadan表单
+
+hotkey:                        # 行情端快捷键下单(channel=hotkey时生效)
+  hexin_exe: ""                # hexin.exe路径(空=按进程名自动连接同花顺行情端)
+  buy_latest_key: "{F1}"       # 买入: 最新价, 账户25%仓位
+  buy_ask1_key: "{F2}"         # 买入: 卖一价, 25%仓位(极端情况备用)
+  sell_latest_key: "{F3}"      # 卖出: 最新价, 可用仓位100%清仓
+  sell_bid1_key: "{F4}"        # 卖出: 买一价, 清仓(核卖)
+  cancel_key: "{F5}"           # 秒撤: 撤销全部未成交委托(系统级异常/盘后清理用)
+  cancel_single_key: "{F8}"    # 单只撤: 撤销当前股票的买卖挂单(下单超时/挂单到期用)
+  position_key: "{F6}"         # 查当前个股持仓浮层(用户自定义, 不弹xiadan)
+  entrust_key: "{F7}"          # 查当日委托(会弹交易系统页面, 弃用)
+  buy_variant: "latest"        # BUY信号用键: latest=F1 / ask1=F2
+  sell_variant: "latest"       # SELL信号用键: latest=F3 / bid1=F4
+                               # F3最新价卖(2026-09-12用户定, 不核卖);
+                               # 跌停排队卖走queue_only不撤单+封单监控
+  buy_precheck_f6: true        # 买入前F6预检该股是否已有持仓(防人工买入重复
+                               # 建仓, 每笔多花约4s; 发现已有持仓拒绝下单+告警)
+  goto_settle_seconds: 1.2     # 回车切股票后等页面激活(压缩自2.5s, F键无需图表渲染完成)
+  f6_verify_enable: true       # 下单后F6查个股持仓浮层验证成交(行情端浮层,
+                               # 不弹xiadan无验证码; BUY见持仓/SELL变无持仓=成功)
+  f6_verify_timeout: 12        # SELL后F6轮询窗口上限(秒)
+  f6_first_check: 4            # 下单后首次F6查询等待(秒): 市价单1-3s成交, 4s首查
+  f6_poll_interval: 5          # F6轮询间隔(秒): 未成交则复查, 成交立即返回
+  buy_quick_confirm: 30        # BUY后F6轮询窗口上限(秒): 成交立即建仓; 超时=挂单中,
+                               # 转后台5分钟监控(到点复查, 仍未成交F5秒撤+告警)
+  buy_pending_wait: 120        # 常规时段挂单总等待120秒(2分钟): 后台线程到点F6复查,
+                               # 仍未成交则F8/F5撤单并推送告警, 延迟成交则补建/清仓
+  opening_pending_wait: 300    # 开盘窗口(9:25-9:30)挂单总等待300秒(5分钟):
+                               # 首轮扫描在竞价结束~连续开盘间完成, 挂单给足5分钟
+                               # (集合竞价9:15-9:25不交易; sessions自09:25起)
+  verify_enable: false         # 旧xiadan委托回查(弹窗+验证码, 仅手动开启;
+                               # f6_verify_enable优先于本项)
+  verify_timeout: 15           # 回查超时(秒)
+  verify_interval: 1.5         # 回查轮询间隔(秒)
+  sell_precheck_f6: true       # 卖出前F6预检(与买入对称): 券商侧无持仓拒卖;
+                               # 检测异常fail-open放行(券商端最终校验)
+  # 发键前价格守卫(2026-09-15裁定第一阶段): 偏离超阈值只WARNING+写滑点事件,
+  # 照常发单; price_guard_enforce=true才拒单。queue_only排队/结算单一律跳过
+  price_guard_enable: true
+  price_guard_enforce: false   # 默认只告警不拦截(预留强制开关)
+  price_guard_buy_pct: 0.008   # 买入现价高于信号价0.8%告警
+  price_guard_sell_pct: 0.015  # 卖出现价低于信号价1.5%告警
+  cancel_verify_enable: true   # F8撤单前核对窗口代码+撤单后F6验证; 失败只
+                               # CRITICAL告警人工介入, 绝不自动补撤/双撤循环
+  f6_fallback_enable: true     # F6连续异常(链路不可用)自动降级xiadan只读对账
+  f6_fallback_threshold: 2     # 连续2次异常触发(只读采集, 绝不写/撤/补)
+  f6_fallback_cooldown: 1800   # 两次只读对账最小间隔(秒), 防频繁弹xiadan
+  # 尾盘集合竞价(14:57-15:00)顶格报价(2026-09-16用户裁定): 尾盘结算单改发
+  # 用户在同花顺面板自定义的"涨停价买入/跌停价卖出"键——竞价按收盘价统一
+  # 撮合, 顶格只为拿撮合优先级, 并非按涨跌停价成交; 数量仍由客户端决定
+  # (F1=25%仓位/F3=清仓语义不变, 系统不算股数)。使用前须先在同花顺客户端
+  # 快捷键设置里绑定对应按键, 再填入键位串; 留空=回退常规F1/F3并WARNING
+  # (不阻断结算)。封板物理例外不保证成交: 涨停封板买单不挂(跳过+开板告警),
+  # 跌停封板卖单仍排队+封单监控。
+  closing_limit_key_enable: true
+  closing_buy_limit_key: ""    # 涨停价买入自定义键, 如 "{F9}"; 空=回退F1最新价
+  closing_sell_limit_key: ""   # 跌停价卖出自定义键, 如 "{F10}"; 空=回退F3最新价
+  # 发键白名单(2026-09-18采纳): 白名单外的键拒绝发送+审计; 默认允许F1-F12
+  key_whitelist_enable: true
+  allowed_keys: []            # 空=内置F1-F12; 可填如["F1","F3","F9"]收窄
+  # F8核对fail-open滑窗告警(2026-09-18采纳): 30分钟内标题解析失败3次→告警
+  cancel_fail_alert_enable: true
+  cancel_fail_window_sec: 1800
+  cancel_fail_max: 3
+  # 收盘成交复查退避(2026-09-18采纳): 15:00:05/15:10:05/15:30:05三次复查,
+  # 第三次仍F6异常才unknown
+  closing_recheck_delays: [5, 600, 1800]
+  # 撤单竞态撤前F6终核(2026-09-18采纳, 默认关; 失败处置仍遵循第2项裁定)
+  cancel_race_check_enable: false
+
+easytrader:                     # xiadan配置(hotkey模式仅用于委托回查/持仓资金查询)
+  exe_path: "D:/THS/同花顺/xiadan.exe"  # 同花顺xiadan.exe路径(自动探测自运行进程)
+  tesseract_cmd: ""             # Tesseract OCR路径(验证码识别, 可选)
+  connect_timeout: 10
+  client_type: universal_client # universal_client / ths
+
+risk:                           # 交易风控
+  enable: true
+  kill_switch_file: logs/kill_switch.flag  # 文件存在即熔断(紧急停止)
+  max_orders_per_day: 20        # 单日最大下单数
+  max_qty_per_order: 1000       # 单笔最大数量
+  default_qty: 100              # 默认下单数量(1手)
+  per_stock_daily_buys: 1       # 每股每日限买次数(如10点买入金健米业后当天
+                                # 不再买该股; 卖出清仓后也不回补; 0=不限)
+  state_file: logs/trade_state.json
+  sessions:                     # 交易时段(工作日); 集合竞价9:15-9:25不交易,
+                                # 9:25竞价结束后可挂连续竞价单(9:30撮合),
+                                # 首轮扫描单即在此窗口挂出, 撤单等待特殊5分钟
+    - ["09:25:00", "11:30:00"]
+    - ["13:00:00", "15:00:00"]
+  market_guard_enable: true     # 大盘系统性风控(防系统性下跌日个股信号失效)
+  market_index: "sh000001"      # 主监控指数(上证指数; 可改sh000300沪深300)
+  market_index_2: "sz399006"    # 副监控指数(创业板指; 空字符串=不监控; 任一指数熔断即触发)
+  market_warn_pct: -3.0         # 跌破-3%: WARNING告警一次
+  market_crash_pct: -4.0        # 跌破-4%: 买侧熔断(只禁买入; 卖出/撤单照常)
+  buy_halt_file: logs/kill_buy.flag  # 买侧熔断标志(自动写/自动解除; 区别于人工全停kill_switch.flag)
+  market_crash_recovery_pct: 0.01    # 指数自熔断低点回升1%自动解除买侧熔断(0=当日不自动解除)
+  # 买侧熔断解除冷却防抖(2026-09-18采纳, 默认0=回升达阈立即解除):
+  # 首次满足后观察该秒数, 再跌穿则取消解除, 站稳才解除
+  buy_halt_recover_cooldown: 0       # 如900=15分钟防抖
+  # unknown挂单悬置升级(2026-09-18采纳): 悬置15min CRITICAL/60min日报标记
+  unknown_stuck_critical_sec: 900
+  unknown_stuck_report_sec: 3600
+  # 尾盘新主动买入截止(2026-09-15用户裁定=14:55): 之后不发新买单(含二次挂买);
+  # 卖单/止损/F8撤单/14:57收盘竞价queue_only结算单全部不受影响
+  buy_deadline_enable: true
+  buy_deadline: "14:55:00"          # 空字符串=关闭
+  max_requeue_per_day: 3            # 单票每日重挂上限(首次挂单不计, 买卖分别计;
+                                    # 0=关闭; queue_only结算单旁路; 日20单总额度不变)
+
+notify:                         # 告警手机推送(留空=该通道不启用, 全空=只写本地)
+  qywechat_webhook: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=240067cb-c8e4-4393-a856-655efc2cb256"  # 企业微信群机器人(免费无条数限制,主通道)
+  feishu_webhook: "https://open.feishu.cn/open-apis/bot/v2/hook/066f3e7c-1f25-4ac6-b70d-c720530fd6bb"  # 飞书群机器人
+  dingtalk_webhook: ""          # 钉钉群自定义机器人完整webhook URL
+  serverchan_key: ""            # Server酱SENDKEY(微信服务号, 免费版每天限5条, 备选)
+  timeout: 8                    # 推送请求超时(秒)
+
+monitor:                        # 运行监控: 心跳/卡死/覆盖率审计/盘中日报
+  enable: true
+  heartbeat_interval: 30        # 心跳写盘间隔(秒), 心跳文件 logs/heartbeat.json
+  heartbeat_touch_stale: 90     # 主线程超该秒数未干活则心跳停写(挂死检测)
+  heartbeat_stale: 120          # 看门狗阈值: 心跳超该秒数未更新即推送告警
+  scan_timeout: 5               # 单只股票切页等待上限(秒): 超时重试1次->
+                                # 重建扫描页->仍失败告警(不无限等待)
+  coverage_min: 1.0             # 扫描覆盖率下限: 实扫成功数/本轮计划数,
+                                # 低于该值记异常(1.0=必须100%)
+  lunch_report: true            # 午盘休息(11:30-13:00)自动发一次盘中日报
+  stuck_abort: 3                # 连续N只切页失败中止本轮(防整轮空转)
+  stuck_policy: abort           # abort=达stuck_abort中止整轮(默认); skip=跳过问题股续扫
+  # 看门狗自动重启auto_round(2026-09-15裁定, 带护栏): 主进程死亡后自动拉起
+  watchdog_restart_enable: true
+  watchdog_restart_max_daily: 3   # 每日最多重启3次
+  watchdog_restart_deadline: "14:57:00"  # 此时刻后不重启(让路收盘结算)
+  watchdog_restart_state: logs/watchdog_restart.json
+  # 时钟/行情时效守卫(零依赖只告警): 源时间超前本机钟/交易时段行情陈旧超阈值告警
+  clock_guard_enable: true
+  clock_skew_warn_sec: 30       # 行情源时间超前本机钟30s(疑似本机钟停/慢)
+  clock_stale_warn_sec: 120     # 交易时段快照陈旧超120s(疑似行情中断)
+  # 运行资源守卫(轮头检查, 零第三方依赖; 只告警不改交易, 边沿触发不刷屏)
+  resource_check_enable: true   # 磁盘余量/logs体量/进程峰值内存
+  disk_warn_gb: 5               # 磁盘剩余<5GB: WARNING预警
+  disk_critical_gb: 2           # 磁盘剩余<2GB: CRITICAL手机推送(与盘前自检阻断线一致)
+  logs_size_warn_mb: 500        # logs目录超500MB: WARNING(检查清理TTL)
+  rss_warn_mb: 800              # 进程峰值内存超800MB: WARNING(疑似内存泄漏)
+
+vision:
+  templates_dir: detector/templates
+  digits_dir: detector/templates/digits  # 0-9数字模板(标题代码行读码用)
+  long_prefix: long_           # "多"模板文件名前缀, 如 long_1.png
+  short_prefix: short_         # "空"模板文件名前缀, 如 short_1.png
+
+cleanup:                        # 垃圾清理(TTL策略, 无数据库; 状态文件永不清理)
+  enable: true
+  screenshot_ttl_hours: 48      # screenshots/*.png 调试截图保留48小时
+  log_ttl_hours: 336            # logs/scan_*.log 保留14天
+  debug_ttl_hours: 168          # 诊断png/ui_*.xml 保留7天
+  archive_ttl_hours: 2160       # 轮次results/summary档案保留90天
+  event_ttl_hours: 8760         # events_*.jsonl审计事件保留1年(复盘/追责核心数据)
+
+schema:                         # 配置schema严格模式(2026-09-18采纳, 默认关=warn-only)
+  strict_enable: false          # true=risk/seal/timing段越界升级BLOCK, main拒绝启动
+  strict_sections: [risk, seal, timing]
+
+backup:                         # 每日关键数据备份(2026-09-18采纳, 默认关)
+  enable: false                 # auto_round每日首轮打zip; 本地备份, 排除cookie凭据
+  dir: logs/backups
+  retain_days: 30
+
+ui:
+  stock_code_pattern: "(?<!\\d)\\d{6}(?!\\d)"
+  next_button_keywords: ["切到下一", "下一只", "下一股票", "next"]
+  next_button_ids: ["al_rightbutton", "next", "switch_right"]
