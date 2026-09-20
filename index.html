@@ -95,6 +95,28 @@
   .consensus-alts h4{font-size:13px;margin-bottom:9px;color:#c5d4ee}
   .consensus-filter{margin-top:14px;font-size:12px;border-radius:10px;padding:9px 12px;
     border:1px dashed #4a5f86;color:#9fb4d4;background:rgba(13,22,42,.5)}
+  /* quality monitor */
+  .quality-card{border:1px solid #2c4162;border-radius:16px;margin-bottom:18px;
+    background:linear-gradient(105deg,#0e2036e8,#141b33d9 55%,#1d2440bd);
+    padding:18px 22px;position:relative;overflow:hidden}
+  .quality-card::before{content:"";position:absolute;top:0;left:0;width:28%;height:2px;
+    background:linear-gradient(90deg,#22d3ee,#34d399,transparent);box-shadow:0 0 14px #22d3ee}
+  .quality-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .quality-head h3{font-size:16px;letter-spacing:1px}
+  .quality-tag{font-size:11px;border:1px solid #375471;border-radius:20px;padding:3px 10px;
+    color:#8fd6c4;background:#0f2e3380}
+  .q-table{width:100%;border-collapse:collapse;font-size:13px}
+  .q-table th{font-size:11px;color:#7f92b3;font-weight:600;text-align:left;
+    padding:8px 10px;border-bottom:1px solid #2a3c5c}
+  .q-table td{padding:10px;border-bottom:1px solid #1d2d49}
+  .q-table tbody tr:hover{background:rgba(34,211,238,.05)}
+  .qn{font-weight:600;color:#e5ecf7;white-space:nowrap}
+  .qc{color:#9fb4d4}
+  .qcell{display:flex;flex-direction:column;gap:3px}
+  .qw{font-size:11px;font-weight:600}
+  .qw-up{color:#1fc28a}.qw-dn{color:#f6465d}
+  .quality-note{margin-top:12px;font-size:12px;color:#8497b8;line-height:1.7}
+  .quality-empty{padding:26px 10px;text-align:center;color:#7184a5;font-size:13px}
   /* action plan */
   .plan-card{border:1px solid #2c4162;border-radius:16px;margin-bottom:18px;
     background:linear-gradient(105deg,#10243de8,#151d35d9 55%,#201c39bd);
@@ -373,6 +395,7 @@
 <div class="system-status" id="system-status"></div>
 
 <div id="consensus-wrap"></div>
+<div id="quality-wrap"></div>
 <div id="plan-wrap"></div>
 
 <div class="toolbar">
@@ -503,6 +526,11 @@ const axisStyle={axisLine:{lineStyle:{color:'#2a3856'}},
 const tip={backgroundColor:'#0f1830',borderColor:'#2a3856',textStyle:{color:'#e5ecf7',fontSize:12}};
 
 function pct(v,d=2){return v==null?'—':(v*100).toFixed(d)+'%';}
+function pctHtml(v,d=2){
+  if(v==null)return '<span class="na">—</span>';
+  const cls=v>0?'up':(v<0?'down':'');
+  return `<span class="${cls}">${v>0?'+':''}${(v*100).toFixed(d)}%</span>`;
+}
 function signed(v,d=2){if(v==null)return '<span class="na">—</span>';
   const cls=v>0?'up':v<0?'down':'na';
   return `<span class="${cls}">${v>0?'+':''}${(v*100).toFixed(d)}%</span>`;}
@@ -906,6 +934,56 @@ const REGIME_META={
   neutral:['中性 · 按纪律','regime-neutral','指数与均线方向不一致：严格按计划与纪律执行'],
   unknown:['环境待确认','regime-unknown','指数样本不足：按弱势谨慎处理']
 };
+function renderQuality(){
+  const wrap=document.getElementById('quality-wrap');
+  const rows=[];
+  for(const m of realModels()){
+    const g=h=>m[session]?.open?.['d'+h]?.all?.[sampleMode];
+    const a1=g(1),a3=g(3),a5=g(5);
+    const has=(a1?.mean!=null)||(a3?.mean!=null)||(a5?.mean!=null)
+              ||(a1?.d0?.mean!=null);
+    if(!has)continue;
+    rows.push({name:modelDisplayName(m.key),
+      n:a1?.n??0,batches:a1?.batches??0,
+      d0:a1?.d0??null,d1:a1,d3:a3,d5:a5});
+  }
+  if(!rows.length){
+    wrap.innerHTML=`<div class="quality-card"><div class="quality-head"><h3>模型选股质量监控 · ${session==='am'?'早盘':'午盘'}</h3></div>
+      <div class="quality-empty">当前场次还没有已收盘、经交易日历验证的全样本质量数据；行情落地后自动更新。</div></div>`;
+    return;
+  }
+  rows.sort((a,b)=>(b.d1?.mean??-9)-(a.d1?.mean??-9));
+  const qcell=a=>{
+    if(!a||a.mean==null)return '<span class="na">—</span>';
+    const wcls=a.win>=.5?'qw-up':'qw-dn';
+    return `<div class="qcell">${pctHtml(a.mean)}<span class="qw ${wcls}">胜率${(a.win*100).toFixed(0)}% · ${a.n}只</span></div>`;
+  };
+  const trs=rows.map(r=>`
+    <tr>
+      <td class="qn">${esc(r.name)}</td>
+      <td class="qc">${r.batches}批 / ${r.n}只</td>
+      <td class="qc">${r.d0?`<div class="qcell">${pctHtml(r.d0.mean)}<span class="qw ${r.d0.win>=.5?'qw-up':'qw-dn'}">胜率${(r.d0.win*100).toFixed(0)}%</span></div>`:'<span class="na">—</span>'}</td>
+      <td class="qc">${qcell(r.d1)}</td>
+      <td class="qc">${qcell(r.d3)}</td>
+      <td class="qc">${qcell(r.d5)}</td>
+    </tr>`).join('');
+  wrap.innerHTML=`
+  <div class="quality-card">
+    <div class="quality-head">
+      <h3>模型选股质量监控 · ${session==='am'?'早盘':'午盘'}</h3>
+      <span class="quality-tag">全样本（整份名单）· 毛涨跌幅未扣费用</span>
+    </div>
+    <table class="q-table">
+      <thead><tr>
+        <th>模型</th><th>覆盖</th><th>当日 开盘→收盘</th>
+        <th>D+1 收盘</th><th>D+3 收盘</th><th>D+5 收盘</th>
+      </tr></thead>
+      <tbody>${trs}</tbody>
+    </table>
+    <div class="quality-note">每只模型选出的全部股票（跨批次累计）逐日测量；未收盘/缺价的股票不计入该周期，破位个票在真实交易中会提前卖出，但大样本均值客观反映模型整体选股能力。当前按 D+1 均值排序。</div>
+  </div>`;
+}
+
 function renderPlan(){
   const wrap=document.getElementById('plan-wrap');
   const p=DATA.action_plan;
@@ -939,8 +1017,8 @@ function renderPlan(){
     <div class="plan-grid">${orders}</div>
     ${p.alternates.length?`<div class="plan-sub"><h4>替补递补</h4><div class="alt-chips">${alts}</div></div>`:''}
     <div class="plan-cols">
-      <div class="plan-exit"><h4>退出/核对时点</h4>${exits}</div>
-      <div class="plan-risk"><h4>风控纪律</h4><ul>${risks}</ul></div>
+      <div class="plan-exit"><h4>成交核对 / 质量监控</h4>${exits}</div>
+      <div class="plan-risk"><h4>纪律说明</h4><ul>${risks}</ul></div>
     </div>
   </div>`;
 }
@@ -1015,7 +1093,7 @@ function renderAll(){
   if(!DATA)return;
   document.querySelector('#basis-grp [data-b="open"]').textContent=session==='pm'?'上午收盘固定价买入':'开盘价买入';
   document.querySelectorAll('.toolbar button').forEach(b=>b.setAttribute('aria-pressed',String(b.classList.contains('on'))));
-  renderKPIs();renderSystemStatus();renderConsensus();renderPlan();renderTable();renderHoldings();renderBar();
+  renderKPIs();renderSystemStatus();renderConsensus();renderQuality();renderPlan();renderTable();renderHoldings();renderBar();
   renderWin();renderPath();renderExec();renderFillRate();renderBox();renderNav();renderHeat();renderCohorts();
 }
 
