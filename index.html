@@ -57,6 +57,44 @@
   .status-chip b{display:block;color:var(--txt);font-size:14px;margin:3px 0}
   .status-chip.warn{border-color:rgba(251,191,36,.45)}
   .status-chip.bad{border-color:rgba(248,113,113,.5)}
+  /* consensus */
+  .consensus-card{border:1px solid #33406a;border-radius:16px;margin-bottom:18px;
+    background:linear-gradient(105deg,#131f3dee,#171d38e0 55%,#252044c9);
+    padding:18px 22px;position:relative;overflow:hidden}
+  .consensus-card::after{content:"";position:absolute;top:0;left:0;width:30%;height:2px;
+    background:linear-gradient(90deg,#fbbf24,#f472b6,transparent);
+    box-shadow:0 0 14px #fbbf24}
+  .consensus-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+  .consensus-head h3{font-size:16px;letter-spacing:1px}
+  .consensus-desc{font-size:12px;color:#8fa3c4;margin-bottom:14px}
+  .consensus-empty{font-size:13px;color:#7b8bab;padding:18px 4px}
+  .consensus-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+  .cons-row{background:rgba(13,22,42,.72);border:1px solid var(--border);border-radius:12px;
+    padding:12px 14px;transition:.2s var(--ease)}
+  .cons-row:hover{border-color:rgba(251,191,36,.5);transform:translateY(-2px)}
+  .cons-row.hot{border-color:rgba(251,191,36,.55);
+    background:linear-gradient(135deg,rgba(60,45,12,.35),rgba(13,22,42,.72))}
+  .cons-row.is-alt{opacity:.85}
+  .cr-top{display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap}
+  .cr-name{font-weight:700;font-size:13px}
+  .cr-code{color:#8fa3c4;font-size:12px}
+  .cr-fill{margin-left:auto;font-size:11px;border-radius:20px;padding:2px 9px;
+    border:1px solid #3a4c6b;color:#9fb4d4}
+  .cr-fill.cf-filled{color:#7ef0b8;border-color:rgba(31,194,138,.6);background:rgba(31,194,138,.1)}
+  .cr-fill.cf-pending{color:#ffd48a;border-color:rgba(245,185,69,.5);background:rgba(245,185,69,.08)}
+  .cr-fill.cf-locked{color:#ff8a93;border-color:rgba(246,70,93,.5);background:rgba(246,70,93,.08)}
+  .cr-bar{position:relative;height:20px;background:#0d1830;border-radius:10px;overflow:hidden;margin-bottom:8px}
+  .cr-bar-in{position:absolute;left:0;top:0;bottom:0;border-radius:10px;
+    background:linear-gradient(90deg,#38bdf8,#818cf8);transition:width .5s}
+  .cr-bar-in.hot{background:linear-gradient(90deg,#fbbf24,#f472b6);
+    box-shadow:0 0 12px rgba(251,191,36,.6)}
+  .cr-bar-txt{position:absolute;right:9px;top:0;line-height:20px;font-size:11px;
+    color:#dbeafe;text-shadow:0 1px 2px #000}
+  .cr-meta{font-size:11px;color:#8fa3c4;line-height:1.7}
+  .consensus-alts{margin-top:14px}
+  .consensus-alts h4{font-size:13px;margin-bottom:9px;color:#c5d4ee}
+  .consensus-filter{margin-top:14px;font-size:12px;border-radius:10px;padding:9px 12px;
+    border:1px dashed #4a5f86;color:#9fb4d4;background:rgba(13,22,42,.5)}
   /* action plan */
   .plan-card{border:1px solid #2c4162;border-radius:16px;margin-bottom:18px;
     background:linear-gradient(105deg,#10243de8,#151d35d9 55%,#201c39bd);
@@ -334,6 +372,7 @@
 <div class="notice" id="notice"></div>
 <div class="system-status" id="system-status"></div>
 
+<div id="consensus-wrap"></div>
 <div id="plan-wrap"></div>
 
 <div class="toolbar">
@@ -471,7 +510,7 @@ function pr(v,d=2){return v==null?'<span class="na">—</span>':Number(v).toFixe
 
 /* KPI */
 function renderKPIs(){
-  const ms=DATA.models;
+  const ms=realModels();
   const sCohorts=DATA.cohorts.filter(c=>c.session===session);
   const latest=sCohorts[sCohorts.length-1];
   const totalValid=ms.reduce((a,m)=>a+([1,3,5].reduce((n,h)=>n+(buyCell(m,h).n||0),0)),0);
@@ -534,7 +573,7 @@ function renderTable(){
     const on=c[0]===sortKey;
     return `<th class="sortable" data-key="${c[0]}">${c[1]}${on?'<span class="arrow">'+(sortDir<0?'▼':'▲')+'</span>':''}</th>`;
   }).join('')+'</tr></thead>';
-  const rows=sortRows([...DATA.models]);
+  const rows=sortRows(realModels());
   function fmt(key,v,m){
     if(key.endsWith('.batches'))return `<td>${v||0}</td>`;
     if(key.endsWith('.n'))return `<td class="${v?'':'na'}">${v||0}</td>`;
@@ -564,7 +603,7 @@ function renderHoldHead(){
   const allCohorts=Object.keys(DATA.holdings).sort();
   const cohorts=allCohorts.filter(d=>dirSession(d)===session);
   if(!cohorts.includes(selCohort))selCohort=cohorts[cohorts.length-1]||'';
-  const models=DATA.models;
+  const models=realModels();
   if(!models.some(m=>m.key===selModel))selModel=models[0]?models[0].key:'';
   const m=models.find(x=>x.key===selModel);
   const sessLabel=session==='am'?'早盘':'午盘';
@@ -625,11 +664,13 @@ function renderHoldings(){
 }
 
 /* bar / win */
-function names(){return DATA.models.map(m=>m.name);}
+/* 共识（集成）为虚拟模型，独立专区展示；排名/图表只列真实模型，跑分口径不变。*/
+function realModels(){return DATA.models.filter(m=>!m.virtual);}
+function names(){return realModels().map(m=>m.name);}
 function renderBar(){
   const series=[1,3,5].map(h=>({
     name:'D+'+h,type:'bar',barMaxWidth:22,
-    data:DATA.models.map(m=>{
+    data:realModels().map(m=>{
       const v=buyCell(m,h)[metric==='top5'?'mean':metric];
       return {value:v==null?null:+(v*100).toFixed(2)};})
   }));
@@ -649,7 +690,7 @@ function renderBar(){
 function renderWin(){
   const series=[1,3,5].map(h=>({
     name:'D+'+h,type:'bar',barMaxWidth:22,
-    data:DATA.models.map(m=>{const v=buyCell(m,h).win;
+    data:realModels().map(m=>{const v=buyCell(m,h).win;
       return {value:v==null?null:+(v*100).toFixed(1)};}),
     markLine:h===1?{silent:true,symbol:'none',
       data:[{yAxis:50,lineStyle:{color:'#f6465d',type:'dashed'},label:{color:'#f6465d',formatter:'50%'}}]}:undefined
@@ -673,7 +714,7 @@ function renderPath(){
             x.mean==null?null:+(x.mean*100).toFixed(2),
             x.mae==null?null:+(-x.mae*100).toFixed(2)];};
   const mfe=[],fin=[],mae=[];
-  DATA.models.forEach(m=>{const a=c(m);mfe.push(a[0]);fin.push(a[1]);mae.push(a[2]);});
+  realModels().forEach(m=>{const a=c(m);mfe.push(a[0]);fin.push(a[1]);mae.push(a[2]);});
   chart('pathChart').setOption({
     animation:fxEnabled&&!reducedMotion.matches,
     tooltip:{trigger:'axis',...tip,valueFormatter:v=>v==null?'—':v+'%'},
@@ -693,7 +734,7 @@ function renderPath(){
 
 /* entry execution quality */
 function renderExec(){
-  const g=(k)=>DATA.models.map(m=>{const v=m[session]['exec'][k];return v==null?null:+(v*100).toFixed(2);});
+  const g=(k)=>realModels().map(m=>{const v=m[session]['exec'][k];return v==null?null:+(v*100).toFixed(2);});
   const seriesDef=session==='am'
     ?[['开盘跳空','gap','#818cf8'],['当日O→C','oc','#fb7185'],['振幅','amp','#fbbf24']]
     :[['固定价(上午收)→当日收','oc','#fb7185']];
@@ -711,7 +752,7 @@ function renderExec(){
 
 /* boxplot */
 function renderBox(){
-  const data=DATA.models.map(m=>{
+  const data=realModels().map(m=>{
     const b=buyCell(m,distH).box;
     // evaluate存小数(如0.05=5%), 这里统一×100, 与其他图表/tooltip口径一致
     return b?b.map(x=>+(x*100).toFixed(2)):[];
@@ -742,7 +783,7 @@ function renderNav(){
   const c=DATA.curves[String(distH)][basis+session];
   const sCohorts=DATA.cohorts.filter(cc=>cc.session===session);
   const xDates=c.dates.map((d,i)=>{const co=sCohorts[i];return co&&co.entry?co.entry:d;});
-  const series=DATA.models.map(m=>({
+  const series=realModels().map(m=>({
     name:m.name,type:'line',smooth:false,connectNulls:false,showSymbol:true,symbolSize:6,
     lineStyle:{width:2,color:m.color},itemStyle:{color:m.color},
     data:(c[sampleMode+'_returns']?.[m.key]||[]).map(v=>v==null?null:+(v*100).toFixed(2))
@@ -789,11 +830,11 @@ function renderHeat(){
 /* cohorts */
 function renderCohorts(){
   const t=document.getElementById('cohort-table');
-  t.innerHTML='<thead><tr><th>批次 / 入场</th>'+DATA.models.map(m=>`<th>${esc(m.name)}</th>`).join('')+'</tr></thead>'+
+  t.innerHTML='<thead><tr><th>批次 / 入场</th>'+realModels().map(m=>`<th>${esc(m.name)}</th>`).join('')+'</tr></thead>'+
   '<tbody>'+DATA.cohorts.map(c=>{
     const sTag=c.session==='pm'?'<span style="color:#fb7185;font-weight:700">[午]</span> ':'<span style="color:#67e8f9">[早]</span> ';
     return `<tr><td>${sTag}${c.entry?'<b>'+c.entry+'</b> <span class="na">(选股 '+c.date+')</span>':'<span class="na">'+c.date+' 待入场</span>'}</td>`+
-    DATA.models.map(m=>{const x=c.models[m.key];
+    realModels().map(m=>{const x=c.models[m.key];
       if(!x)return '<td><span class="na">—</span></td>';
       if(basis==='executed'){
         const f=x.fills?.filled||0;
@@ -802,6 +843,60 @@ function renderCohorts(){
       const v=x.valid_by_basis?.[basis]||x.valid;
       return `<td><span class="chip">${x.picks}股 · 1/3/5:${v[1]}/${v[3]}/${v[5]}</span></td>`;
     }).join('')+'</tr>';}).join('')+'</tbody>';
+}
+
+/* consensus: 独立模型共识榜（Borda聚合，不与单模型跑分混排） */
+const FILL_META={
+  filled:['已成交','cf-filled'],
+  pending:['待行情成交','cf-pending'],
+  ran:['盘中未触及挂单价','cf-ran'],
+  open_locked:['开盘涨停未成交','cf-locked'],
+  one_line:['一字涨停未成交','cf-locked'],
+  no_morn:['缺上午收盘价','cf-ran']
+};
+function modelDisplayName(k){return (DATA.models.find(m=>m.key===k)||{name:k}).name;}
+function renderConsensus(){
+  const wrap=document.getElementById('consensus-wrap');
+  const sCohorts=DATA.cohorts.filter(c=>c.session===session);
+  const co=sCohorts[sCohorts.length-1];
+  if(!co){wrap.innerHTML='';return;}
+  const key=co.date+(session==='pm'?'pm':'');
+  const rows=(DATA.holdings[key]||{}).ensemble;
+  if(!rows){
+    wrap.innerHTML=`<div class="consensus-card"><div class="consensus-head"><h3>模型共识榜 · ${session==='am'?'早盘':'午盘'} · ${co.date}</h3></div>
+      <div class="consensus-empty">本批次在场模型不足 2 个，暂无共识结果</div></div>`;
+    return;
+  }
+  const presentN=Object.keys(co.models||{}).filter(k=>k!=='ensemble').length;
+  const slots=rows.filter(r=>0<r.slot&&r.slot<=5).sort((a,b)=>a.slot-b.slot);
+  const alts=rows.filter(r=>r.alt>0).sort((a,b)=>a.alt-b.alt);
+  const card=(r,tag,isAlt)=>{
+    const votes=r.votes||0;
+    const pctN=presentN?Math.round(votes/presentN*100):0;
+    const hot=pctN>=80;
+    const[flabel,fcls]=FILL_META[r.fill]||['—',''];
+    return `<div class="cons-row ${hot?'hot':''} ${isAlt?'is-alt':''}">
+      <div class="cr-top"><span class="slot-tag">${tag}</span>
+        <span class="cr-name">${esc(r.name)}</span><span class="cr-code">${esc(r.code)}</span>
+        <span class="cr-fill ${fcls}">${esc(flabel)}</span></div>
+      <div class="cr-bar"><div class="cr-bar-in ${hot?'hot':''}" style="width:${pctN}%"></div>
+        <span class="cr-bar-txt">${votes}/${presentN} 模型共识 · ${pctN}%</span></div>
+      <div class="cr-meta">Borda ${r.pick_score==null?'—':r.pick_score}${r.ballots?` · 提名：${r.ballots.map(b=>esc(modelDisplayName(b.model))+'#'+b.rank).join('，')}`:''}</div>
+    </div>`;
+  };
+  const uf=(DATA.universe_filter||{}).cohorts?.[key];
+  const filterLine=uf?`<div class="consensus-filter">交易范围：仅沪深主板 · 本批次已过滤 ${uf.total} 只（${Object.entries(uf.by_board).map(([k,v])=>esc(k)+v+'只').join('、')}）；模型原始名单完整保留，仅在监控前剔除</div>`:'';
+  wrap.innerHTML=`<div class="consensus-card">
+    <div class="consensus-head">
+      <h3>模型共识榜 · ${session==='am'?'早盘':'午盘'} · ${co.date}</h3>
+      <span class="plan-badge">Borda 位次加权</span>
+      <span class="plan-badge">${presentN} 个模型在场</span>
+    </div>
+    <div class="consensus-desc">共识强度=投票模型占比，金色为 ≥80% 高共识；聚合只用本批次已确定名单，不含任何收益或未来信息</div>
+    <div class="consensus-grid">${slots.map(r=>card(r,'槽'+r.slot,false)).join('')}</div>
+    ${alts.length?`<div class="consensus-alts"><h4>共识替补</h4><div class="consensus-grid">${alts.map(r=>card(r,'替'+r.alt,true)).join('')}</div></div>`:''}
+    ${filterLine}
+  </div>`;
 }
 
 /* action plan */
@@ -858,7 +953,7 @@ function renderFillRate(){
   const emptyGraphic=[{type:'text',left:'center',top:'middle',
     style:{text:(session==='am'?'早盘':'午盘')+'暂无批次数据',fill:'#5b6b88',fontSize:14}}];
   if(!c){ch.setOption({graphic:emptyGraphic},true);return;}
-  const vals=DATA.models.map(m=>{
+  const vals=realModels().map(m=>{
     const x=c.models[m.key];
     const filled=x?.fills?.filled||0;
     return {value:+(filled/5*100).toFixed(0),filled,slots:x?.slots||0};
@@ -920,7 +1015,7 @@ function renderAll(){
   if(!DATA)return;
   document.querySelector('#basis-grp [data-b="open"]').textContent=session==='pm'?'上午收盘固定价买入':'开盘价买入';
   document.querySelectorAll('.toolbar button').forEach(b=>b.setAttribute('aria-pressed',String(b.classList.contains('on'))));
-  renderKPIs();renderSystemStatus();renderPlan();renderTable();renderHoldings();renderBar();
+  renderKPIs();renderSystemStatus();renderConsensus();renderPlan();renderTable();renderHoldings();renderBar();
   renderWin();renderPath();renderExec();renderFillRate();renderBox();renderNav();renderHeat();renderCohorts();
 }
 
