@@ -488,6 +488,7 @@
 <script>
 let DATA=null, basis='open', metric='top5', distH=5, session='am';
 let sampleMode='common';
+let _lastSig='';
 let selModel='', selCohort='';
 let sortKey='d5.top5', sortDir=-1;
 const charts={};
@@ -1074,6 +1075,10 @@ async function refresh(){
     if(!r.ok)throw new Error('HTTP '+r.status);
     const next=await r.json();
     if(next.error||!Array.isArray(next.models)||!next.holdings||!next.curves)throw new Error(next.error||'数据格式不完整');
+    // 指纹比对：数据没变就跳过重绘(看板一天只变3次, 95%轮询为空轮)。
+    const sig=JSON.stringify(next);
+    if(sig===_lastSig){loadError=false;return;}
+    _lastSig=sig;
     DATA=next;loadError=false;
     document.getElementById('generated').textContent='快照生成于 '+DATA.generated+' 北京时间';
     renderAll();
