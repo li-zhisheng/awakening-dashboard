@@ -107,6 +107,9 @@
   .quote-dialog button:disabled{opacity:.5;cursor:wait}
   .quote-price{font-size:36px;font-weight:700;line-height:1.3;margin-top:20px;font-variant-numeric:tabular-nums}
   .quote-change{font-size:16px;min-height:24px;font-variant-numeric:tabular-nums}
+  .quote-baseline{display:flex;align-items:center;gap:8px;margin-top:10px;
+    font-size:13px;color:#cbd5e1;font-variant-numeric:tabular-nums}
+  .quote-baseline::before{content:"";width:24px;border-top:1px dashed #94a3b8}
   .quote-chart{width:100%;height:280px;margin:12px 0}
   .quote-chart[hidden]{display:none}
   .quote-status{font-size:13px;color:#a9bad3;line-height:1.7;margin:12px 0}
@@ -425,6 +428,7 @@
   </div>
   <div id="quote-price" class="quote-price">—</div>
   <div id="quote-change" class="quote-change">—</div>
+  <p class="quote-baseline">昨收 / 零轴 <strong id="quote-prev">—</strong></p>
   <p id="quote-time" class="quote-time"></p>
   <div id="quote-chart" class="quote-chart" role="img" aria-label="分时价格走势图" hidden></div>
   <p id="quote-status" class="quote-status" role="status" aria-live="polite">正在读取行情…</p>
@@ -1016,6 +1020,7 @@ function drawMinuteQuote(q){
   quoteEl('price').textContent='¥'+q.price.toFixed(2);
   quoteEl('change').className='quote-change '+cls;
   quoteEl('change').textContent=(positive?'+':'')+q.change.toFixed(2)+'  /  '+(positive?'+':'')+q.percent.toFixed(2)+'%';
+  quoteEl('prev').textContent='¥'+q.prev.toFixed(2)+'（0.00%）';
   const s=q.stamp;
   quoteEl('time').textContent=`行情时间 ${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)} ${s.slice(8,10)}:${s.slice(10,12)}:${s.slice(12,14)} · 北京时间`;
   const values=q.points.filter(v=>v!==null);
@@ -1083,6 +1088,7 @@ function openQuote(code,name){
   quoteEl('code').textContent=code+' · 分时行情';
   quoteEl('price').className='quote-price';quoteEl('price').textContent='—';
   quoteEl('change').className='quote-change';quoteEl('change').textContent='—';
+  quoteEl('prev').textContent='—';
   quoteEl('time').textContent='';
   quoteEl('status').textContent='正在读取行情…';
   quoteEl('chart').hidden=true;quoteChart?.clear();
