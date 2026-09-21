@@ -489,6 +489,7 @@
 let DATA=null, basis='open', metric='top5', distH=5, session='am';
 let sampleMode='common';
 let _lastSig='';
+const _CACHE_KEY='aw_quant_dash_v1';
 let selModel='', selCohort='';
 let sortKey='d5.top5', sortDir=-1;
 const charts={};
@@ -1060,30 +1061,49 @@ function renderFillRate(){
 }
 
 /* refresh */
+async function fetchSnapshot(attempts=3){
+  // 连接建立阶段的瞬时抖动(ERR_SOCKET_NOT_CONNECTED等)本轮内快速重试, 不必等30s。
+  for(let i=0;i<attempts;i++){
+    const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),15000);
+    try{
+      const r=await fetch('data.json',{cache:'no-store',signal:ctrl.signal});
+      if(r.ok)return await r.json();
+      throw new Error('HTTP '+r.status);
+    }catch(e){
+      if(i===attempts-1)throw e;
+      await new Promise(s=>setTimeout(s,400*(i+1)));
+    }finally{clearTimeout(timeout);}
+  }
+}
 async function refresh(){
   if(refreshing)return;
   refreshing=true;
-  const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),15000);
   document.getElementById('refresh-btn').disabled=true;
   try{
-    let r=null;
+    let next=null;
     try{
-      const rr=await fetch('data.json',{cache:'no-store',signal:ctrl.signal});
-      if(rr.ok)r=rr;
-    }catch(_){}
-    if(!r)r=await fetch('/api/data',{cache:'no-store',signal:ctrl.signal});
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    const next=await r.json();
+      next=await fetchSnapshot();
+    }catch(first){
+      // 本地server备用入口(GitHub Pages上此步快速404, 无副作用)
+      const r=await fetch('/api/data',{cache:'no-store'});
+      if(!r.ok)throw first;
+      next=await r.json();
+    }
     if(next.error||!Array.isArray(next.models)||!next.holdings||!next.curves)throw new Error(next.error||'数据格式不完整');
     // 指纹比对：数据没变就跳过重绘(看板一天只变3次, 95%轮询为空轮)。
     const sig=JSON.stringify(next);
-    if(sig===_lastSig){loadError=false;return;}
+    if(sig===_lastSig){
+      loadError=false;
+      document.getElementById('generated').textContent='快照生成于 '+DATA.generated+' 北京时间';
+      return;
+    }
     _lastSig=sig;
     DATA=next;loadError=false;
+    try{localStorage.setItem(_CACHE_KEY,sig);}catch(_){}
     document.getElementById('generated').textContent='快照生成于 '+DATA.generated+' 北京时间';
     renderAll();
   }catch(e){loadError=true;document.getElementById('generated').textContent='刷新失败'+(DATA?'，保留上次数据':'')+' · '+String(e);}
-  finally{clearTimeout(timeout);refreshing=false;document.getElementById('refresh-btn').disabled=false;setActive(!document.hidden);}
+  finally{refreshing=false;document.getElementById('refresh-btn').disabled=false;setActive(!document.hidden);}
 }
 function renderSystemStatus(){
   const st=DATA.status||{};
@@ -1172,6 +1192,18 @@ document.addEventListener('visibilitychange',()=>{
   if(!document.hidden){setActive(true);cd=1;}   // 回前台立即拉取
 });
 document.getElementById('refresh-btn').onclick=()=>{cd=REFRESH_EVERY;refresh();};
+// 先渲染本地最后有效快照, 弱网下不再长时间空白; 随后后台静默更新。
+try{
+  const cached=localStorage.getItem(_CACHE_KEY);
+  if(cached){
+    const prev=JSON.parse(cached);
+    if(Array.isArray(prev.models)&&prev.holdings&&prev.curves){
+      DATA=prev;_lastSig=cached;loadError=false;
+      document.getElementById('generated').textContent='快照生成于 '+DATA.generated+' 北京时间 · 本地缓存';
+      renderAll();
+    }
+  }
+}catch(_){}
 refresh();
 </script>
 
