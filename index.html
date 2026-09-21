@@ -107,15 +107,12 @@
   .quote-dialog button:disabled{opacity:.5;cursor:wait}
   .quote-price{font-size:36px;font-weight:700;line-height:1.3;margin-top:20px;font-variant-numeric:tabular-nums}
   .quote-change{font-size:16px;min-height:24px;font-variant-numeric:tabular-nums}
-  .quote-baseline{display:flex;align-items:center;gap:8px;margin-top:10px;
-    font-size:13px;color:#cbd5e1;font-variant-numeric:tabular-nums}
-  .quote-baseline::before{content:"";width:24px;border-top:1px dashed #94a3b8}
-  .quote-chart{width:100%;height:280px;margin:12px 0}
+  .quote-chart{width:100%;height:330px;margin:12px 0}
   .quote-chart[hidden]{display:none}
   .quote-status{font-size:13px;color:#a9bad3;line-height:1.7;margin:12px 0}
   .quote-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}
   @media(max-width:480px){
-    .quote-dialog{padding:16px}.quote-chart{height:250px}.quote-price{font-size:32px}
+    .quote-dialog{padding:16px}.quote-chart{height:310px}.quote-price{font-size:32px}
   }
   .consensus-alts{margin-top:14px}
   .consensus-alts h4{font-size:13px;margin-bottom:9px;color:#c5d4ee}
@@ -428,12 +425,11 @@
   </div>
   <div id="quote-price" class="quote-price">—</div>
   <div id="quote-change" class="quote-change">—</div>
-  <p class="quote-baseline">昨收 / 零轴 <strong id="quote-prev">—</strong></p>
   <p id="quote-time" class="quote-time"></p>
   <div id="quote-chart" class="quote-chart" role="img" aria-label="分时价格走势图" hidden></div>
   <p id="quote-status" class="quote-status" role="status" aria-live="polite">正在读取行情…</p>
   <div class="quote-footer">
-    <p class="quote-note">腾讯行情 · 可能延迟<br>打开期间每15秒刷新 · 虚线为昨收</p>
+    <p class="quote-note">腾讯行情 · 可能延迟 · 每15秒刷新<br>虚线为昨收（0%）；高低点按分时采样，同价取首次，非逐笔极值。</p>
     <button type="button" id="quote-refresh">刷新</button>
   </div>
 </dialog>
@@ -1020,7 +1016,6 @@ function drawMinuteQuote(q){
   quoteEl('price').textContent='¥'+q.price.toFixed(2);
   quoteEl('change').className='quote-change '+cls;
   quoteEl('change').textContent=(positive?'+':'')+q.change.toFixed(2)+'  /  '+(positive?'+':'')+q.percent.toFixed(2)+'%';
-  quoteEl('prev').textContent='¥'+q.prev.toFixed(2)+'（0.00%）';
   const s=q.stamp;
   quoteEl('time').textContent=`行情时间 ${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)} ${s.slice(8,10)}:${s.slice(10,12)}:${s.slice(12,14)} · 北京时间`;
   const values=q.points.filter(v=>v!==null);
@@ -1033,10 +1028,25 @@ function drawMinuteQuote(q){
   if(!quoteChart)quoteChart=echarts.init(quoteEl('chart'));
   quoteChart.resize();
   const span=Math.max(...values.map(v=>Math.abs(v-q.prev)),q.prev*.003)*1.12;
+  const high=Math.max(...values), low=Math.min(...values);
+  const extrema=high===low?[['高/低',high]]:[['高',high],['低',low]];
+  const markers=extrema.map(([name,value])=>{
+    const i=q.points.indexOf(value), change=(value/q.prev-1)*100;
+    return {
+      name,coord:[i,value],value,
+      itemStyle:{color:name==='低'?'#1fc28a':'#fbbf24'},
+      label:{show:true,position:name==='低'?'bottom':'top',distance:8,
+        align:i<60?'left':i>181?'right':'center',
+        color:'#e5ecf7',fontSize:11,lineHeight:16,backgroundColor:'#101827',
+        padding:[3,5],borderRadius:4,
+        formatter:`${name} ${value.toFixed(2)} (${change>0?'+':''}${change.toFixed(2)}%)\n${minuteTimes[i]}`
+      }
+    };
+  });
   const ticks=i=>[0,60,120,181,241].includes(i);
   quoteChart.setOption({
     animation:false,
-    grid:{left:52,right:12,top:20,bottom:32},
+    grid:{left:64,right:16,top:54,bottom:70},
     tooltip:{...tip,trigger:'axis',confine:true,formatter:items=>{
       const p=items.find(x=>x.seriesName==='价格');
       return p&&p.value!=null?`${esc(p.axisValue)}<br>价格 ¥${Number(p.value).toFixed(2)}<br>涨跌幅 ${((p.value/q.prev-1)*100).toFixed(2)}%`:'暂无数据';
@@ -1045,11 +1055,16 @@ function drawMinuteQuote(q){
       axisLabel:{color:'#8b9bb8',fontSize:10,interval:ticks,formatter:v=>v==='11:30'?'11:30/13:00':v},
       axisTick:{show:false},splitLine:{show:false}},
     yAxis:{type:'value',min:Math.max(.01,q.prev-span),max:q.prev+span,...axisStyle,
-      axisLabel:{color:'#8b9bb8',fontSize:11,formatter:v=>v.toFixed(2)},splitNumber:4},
+      // 零轴由 markLine 精确标注；隐藏相邻自动刻度，避免文字重叠。
+      axisLabel:{color:'#8b9bb8',fontSize:11,formatter:v=>Math.abs(v-q.prev)<span*.22?'':v.toFixed(2)},splitNumber:4},
     series:[{name:'价格',type:'line',data:q.points,showSymbol:false,smooth:false,connectNulls:false,
       lineStyle:{width:2,color:'#67c9ff'},itemStyle:{color:'#67c9ff'},
       areaStyle:{color:'rgba(103,201,255,.06)'},
-      markLine:{silent:true,symbol:'none',label:{show:false},lineStyle:{type:'dashed',color:'#94a3b8'},data:[{yAxis:q.prev}]}}]
+      markPoint:{symbol:'circle',symbolSize:7,silent:true,data:markers},
+      markLine:{silent:true,symbol:'none',
+        label:{show:true,position:'start',distance:8,color:'#e5ecf7',fontSize:11,lineHeight:15,
+          backgroundColor:'#101827',padding:[2,0],formatter:`${q.prev.toFixed(2)}\n昨收 0%`},
+        lineStyle:{type:'dashed',color:'#94a3b8'},data:[{yAxis:q.prev}]}}]
   },true);
   quoteEl('chart').setAttribute('aria-label',`${q.date} 分时价格走势图，昨收 ${q.prev.toFixed(2)} 元，现价 ${q.price.toFixed(2)} 元`);
   const nowDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).replaceAll('-','');
@@ -1088,7 +1103,6 @@ function openQuote(code,name){
   quoteEl('code').textContent=code+' · 分时行情';
   quoteEl('price').className='quote-price';quoteEl('price').textContent='—';
   quoteEl('change').className='quote-change';quoteEl('change').textContent='—';
-  quoteEl('prev').textContent='—';
   quoteEl('time').textContent='';
   quoteEl('status').textContent='正在读取行情…';
   quoteEl('chart').hidden=true;quoteChart?.clear();
