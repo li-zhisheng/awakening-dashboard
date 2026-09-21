@@ -110,6 +110,43 @@
   .quote-chart{width:100%;height:330px;margin:12px 0}
   .quote-chart[hidden]{display:none}
   .quote-status{font-size:13px;color:#a9bad3;line-height:1.7;margin:12px 0}
+  .overlap-head{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+  .overlap-filter{display:flex;align-items:center;gap:8px;color:var(--sub);font-size:12px}
+  .overlap-filter select{max-width:100%;background:var(--panel2);color:var(--txt);border:1px solid #334155;
+    border-radius:8px;padding:9px 12px;font:inherit;min-height:40px}
+  .overlap-meta{font-size:12px;color:var(--sub);margin:10px 0 16px;line-height:1.8}
+  .overlap-list{display:grid;gap:8px}
+  .overlap-pair{border:1px solid var(--border);border-radius:10px;background:var(--panel2)}
+  .overlap-pair summary{display:flex;align-items:center;gap:12px;cursor:pointer;list-style:none;padding:14px}
+  .overlap-pair summary::-webkit-details-marker{display:none}
+  .overlap-pair summary:focus-visible,.overlap-more summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .overlap-pair summary::after{content:'＋';color:var(--sub);margin-left:4px}
+  .overlap-pair[open] summary::after{content:'−'}
+  .overlap-names{flex:1;min-width:0;font-size:13px;font-weight:600;line-height:1.7}
+  .overlap-names small{display:block;color:var(--sub);font-size:11px;font-weight:400}
+  .overlap-names em{font-style:normal;color:var(--mut);margin:0 6px}
+  .overlap-blocks{display:flex;gap:4px;flex-shrink:0}
+  .overlap-blocks i{width:17px;height:8px;border-radius:3px;background:#26334b}
+  .overlap-blocks i.on{background:#67c9ff}
+  .overlap-count{font-size:13px;color:#a5dcff;white-space:nowrap;min-width:68px;text-align:right}
+  .overlap-stocks{padding:0 14px 14px;display:grid;gap:8px}
+  .overlap-stock{display:flex;align-items:center;justify-content:space-between;gap:12px;text-decoration:none;
+    color:var(--txt);font-size:13px;padding:10px 12px;border:1px solid var(--border);border-radius:8px}
+  .overlap-stock:hover{border-color:#67c9ff}
+  .overlap-stock small{display:block;font-size:11px;color:var(--sub);margin-top:3px}
+  .overlap-stock span:last-child{color:#7dd3fc;white-space:nowrap;font-size:12px}
+  .overlap-empty{padding:16px;color:var(--sub);font-size:13px;line-height:1.8}
+  .overlap-more{margin-top:18px;border-top:1px solid var(--border);padding-top:14px}
+  .overlap-more>summary{cursor:pointer;color:var(--sub);font-size:13px}
+  .overlap-matrix{overflow-x:auto;margin-top:12px}
+  .overlap-matrix table{border-collapse:separate;border-spacing:3px;width:100%;font-size:11px}
+  .overlap-matrix th,.overlap-matrix td{padding:8px;text-align:center;white-space:nowrap;min-width:52px;border:0}
+  .overlap-matrix th{color:var(--sub);font-weight:400}
+  .overlap-matrix td{border-radius:5px;color:var(--txt)}
+  @media(max-width:480px){
+    .overlap-pair summary{gap:8px;padding:12px}.overlap-blocks{gap:3px}
+    .overlap-blocks i{width:10px}.overlap-count{min-width:60px;font-size:12px}
+  }
   .quote-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}
   @media(max-width:480px){
     .quote-dialog{padding:16px}.quote-chart{height:310px}.quote-price{font-size:32px}
@@ -506,8 +543,7 @@
     <div class="desc">每点对应一次选股批次，缺少完整 Top5 结果时留空。不同批次持仓时间可能重叠，本图不代表账户资金净值。</div>
     <div class="chart tall" id="navChart"></div></div>
 
-  <div class="card span2"><h3 id="heat-title">持仓重叠热力图（最近批次 · Jaccard）</h3>
-    <div class="desc">越亮名单重合越高；对角线恒为1</div><div class="chart tall" id="heatChart"></div></div>
+  <div class="card span2" id="overlap-wrap"></div>
 
   <div class="card span2">
     <h3>批次数据覆盖</h3>
@@ -868,35 +904,79 @@ function renderNav(){
   document.getElementById('nav-title').textContent=`各批次 Top5 净收益 · D+${distH}`;
 }
 
-/* heatmap */
-function renderHeat(){
-  const ov=DATA['overlap_'+session];
-  const nm=k=>(DATA.models.find(m=>m.key===k)||{name:k}).name;
-  const nms=ov.keys.map(nm);
-  const data=[];
-  ov.matrix.forEach((row,i)=>row.forEach((v,j)=>data.push([j,i,+(v*100).toFixed(0)])));
-  const has=nms.length>0;
-  const narrow=window.innerWidth<640;
-  chart('heatChart').setOption({
-    animation:fxEnabled&&!reducedMotion.matches,
-    tooltip:{...tip,formatter:p=>`${esc(nms[p.value[1]])} × ${esc(nms[p.value[0]])}<br/>重叠 ${p.value[2]}%`},
-    grid:{left:narrow?62:70,right:narrow?14:30,top:narrow?10:20,
-          bottom:narrow?62:80,containLabel:true},
-    xAxis:{type:'category',data:nms,...axisStyle,axisLabel:{color:'#8b9bb8',rotate:40,fontSize:narrow?10:11}},
-    yAxis:{type:'category',data:nms,...axisStyle,axisLabel:{color:'#8b9bb8',fontSize:narrow?10:12}},
-    visualMap:{min:0,max:100,calculable:true,orient:'horizontal',left:'center',bottom:8,
-      textStyle:{color:'#8b9bb8'},
-      inRange:{color:['#16233f','#2563eb','#22d3ee','#fbbf24','#f6465d']}},
-    series: has?[{type:'heatmap',data,width:'100%',height:'100%',
-      label:{show:true,color:'#e5ecf7',fontSize:narrow?8:9,
-      formatter:p=>p.value[2]===100?'1':(p.value[2]/100).toFixed(1)},
-      emphasis:{itemStyle:{shadowBlur:8}}}]:[],
-    graphic: has?[]:[{type:'text',left:'center',top:'middle',
-      style:{text:(session==='am'?'早盘':'午盘')+'暂无批次数据',fill:'#5b6b88',fontSize:14}}]
-  },true);
-  document.getElementById('heat-title').textContent=
-    (session==='am'?'早盘':'午盘')+'持仓重叠热力图（'+(ov.date||'—')+'批次 · Jaccard）';
+/* overlap: 前五推荐逐对去重；原始全名单矩阵仅供展开研究。 */
+let overlapModel='';
+function overlapPairs(holdings,models){
+  const lists=models.filter(m=>!m.virtual&&m.key!=='ensemble').map(m=>{
+    const seen=new Set();
+    const rows=(holdings[m.key]||[]).filter(r=>r.slot>0&&r.slot<=5)
+      .sort((a,b)=>a.slot-b.slot).filter(r=>{
+        if(!r.code||seen.has(r.code))return false;seen.add(r.code);return true;
+      });
+    return {...m,rows};
+  });
+  const active=lists.filter(m=>m.rows.length), pairs=[];
+  for(let i=0;i<active.length;i++)for(let j=i+1;j<active.length;j++){
+    const a=active[i], b=active[j], byCode=new Map(b.rows.map(r=>[r.code,r]));
+    const common=a.rows.filter(r=>byCode.has(r.code)).map(r=>({code:r.code,name:r.name,
+      aRank:r.rank??r.slot,bRank:byCode.get(r.code).rank??byCode.get(r.code).slot}));
+    pairs.push({a,b,common,id:a.key+'|'+b.key});
+  }
+  pairs.sort((a,b)=>b.common.length-a.common.length||a.id.localeCompare(b.id));
+  return {active,pairs,empty:lists.filter(m=>!m.rows.length)};
 }
+function overlapMatrix(ov,models){
+  const keys=ov?.keys||[], matrix=ov?.matrix||[];
+  const nm=k=>models.find(m=>m.key===k)?.name||k;
+  // 对角线为1表示非空集合；旧快照中空名单对角线为0，不作零重叠解释。
+  const valid=keys.map((key,i)=>({key,i})).filter(x=>matrix[x.i]?.[x.i]===1);
+  const missing=keys.filter((k,i)=>matrix[i]?.[i]!==1);
+  if(valid.length<2)return '<div class="overlap-empty">至少需要两份有效原始名单才能比较。</div>';
+  const rows=valid.map((a,i)=>'<tr><th scope="row">'+esc(nm(a.key))+'</th>'+
+    valid.map((b,j)=>{
+      if(j<=i)return '<td aria-label="省略自身或重复比较">—</td>';
+      const v=matrix[a.i]?.[b.i];
+      if(typeof v!=='number'||!Number.isFinite(v))return '<td>无数据</td>';
+      const value=Math.max(0,Math.min(1,v));
+      return `<td style="background:rgba(56,189,248,${.04+value*.38})" title="${esc(nm(a.key))} × ${esc(nm(b.key))}">${(value*100).toFixed(1)}%</td>`;
+    }).join('')+'</tr>').join('');
+  return `<p class="overlap-meta">原始全名单相似度＝共同股票数 ÷ 两份名单去重后的总数。包含原始非主板推荐，与上方前五只口径不同；仅显示半边矩阵。${missing.length?' 无有效原始名单：'+missing.map(k=>esc(nm(k))).join('、')+'。':''}</p>
+    <div class="overlap-matrix" role="region" aria-label="全名单相似度矩阵，可横向滚动" tabindex="0">
+    <table><thead><tr><th scope="col">模型</th>${valid.map(x=>`<th scope="col">${esc(nm(x.key))}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function renderHeat(){
+  const wrap=document.getElementById('overlap-wrap');
+  const co=DATA.cohorts.filter(c=>c.session===session).slice(-1)[0];
+  const key=co?co.date+(session==='pm'?'pm':''):'';
+  const info=overlapPairs(DATA.holdings[key]||{},DATA.models);
+  if(overlapModel&&!info.active.some(m=>m.key===overlapModel))overlapModel='';
+  const shown=overlapModel?info.pairs.filter(p=>p.a.key===overlapModel||p.b.key===overlapModel):info.pairs.slice(0,5);
+  const opened=new Set([...wrap.querySelectorAll('details[open]')].map(el=>el.dataset.overlapId));
+  const pairs=shown.map(p=>{
+    const full=p.a.rows.length===5&&p.b.rows.length===5;
+    const count=full?`${p.common.length} / 5 只`:`共同 ${p.common.length} 只`;
+    return `<details class="overlap-pair" data-overlap-id="${esc(p.id)}" ${opened.has(p.id)?'open':''}>
+      <summary><span class="overlap-names">${esc(p.a.name)}<em>×</em>${esc(p.b.name)}
+        ${full?'':`<small>有效前五推荐：${p.a.rows.length}只 / ${p.b.rows.length}只</small>`}</span>
+        <span class="overlap-blocks" aria-hidden="true">${Array.from({length:5},(_,i)=>`<i class="${i<p.common.length?'on':''}"></i>`).join('')}</span>
+        <span class="overlap-count">${count}</span></summary>
+      <div class="overlap-stocks">${p.common.length?p.common.map(r=>`<a class="overlap-stock" href="#quote-${esc(r.code)}" data-quote-code="${esc(r.code)}" data-quote-name="${esc(r.name)}" aria-haspopup="dialog">
+        <span>${esc(r.name)} <small>${esc(r.code)} · ${esc(p.a.name)} #${r.aRank} · ${esc(p.b.name)} #${r.bRank}</small></span><span>分时 ›</span></a>`).join(''):'<p class="overlap-empty">这两组前五推荐没有共同股票。</p>'}</div></details>`;
+  }).join('');
+  wrap.innerHTML=`<div class="overlap-head"><h3>模型选股重合</h3>
+    <label class="overlap-filter">对比范围 <select id="overlap-model"><option value="">重合最多的五组</option>${info.active.map(m=>`<option value="${esc(m.key)}" ${overlapModel===m.key?'selected':''}>${esc(m.name)} 与其他模型</option>`).join('')}</select></label></div>
+    <p class="overlap-meta">${session==='am'?'早盘':'午盘'} · ${esc(co?.date||'暂无批次')} · ${info.active.length} 个模型有有效前五推荐<br>每格代表一只共同股票，点击展开名单与原始排名。比较前五推荐，非实际成交持仓。</p>
+    <div class="overlap-list">${pairs||'<p class="overlap-empty">至少需要两个模型有有效前五推荐才能比较。</p>'}</div>
+    ${info.empty.length?`<p class="overlap-meta">未参与比较（无有效前五推荐）：${info.empty.map(m=>esc(m.name)).join('、')}</p>`:''}
+    <details class="overlap-more" data-overlap-id="matrix" ${opened.has('matrix')?'open':''}><summary>详细分析 · 全名单相似度</summary>${overlapMatrix(DATA['overlap_'+session],DATA.models)}</details>`;
+}
+document.getElementById('overlap-wrap').addEventListener('change',e=>{
+  if(e.target.id==='overlap-model'){overlapModel=e.target.value;renderHeat();}
+});
+document.getElementById('overlap-wrap').addEventListener('click',e=>{
+  const link=e.target.closest('[data-quote-code]');if(!link)return;
+  e.preventDefault();openQuote(link.dataset.quoteCode,link.dataset.quoteName);
+});
 
 /* cohorts */
 function renderCohorts(){
