@@ -454,6 +454,7 @@
 <div class="notice" id="notice"></div>
 <div class="system-status" id="system-status"></div>
 
+<div id="selection-wrap"></div>
 <div id="consensus-wrap"></div>
 <dialog id="quote-dialog" class="quote-dialog" aria-labelledby="quote-title">
   <div class="quote-head">
@@ -998,7 +999,8 @@ function renderCohorts(){
 
 /* consensus: 独立模型共识榜（Borda聚合，不与单模型跑分混排） */
 const FILL_META={
-  filled:['已成交','cf-filled'],
+  filled:['价格可成交（估计）','cf-filled'],
+  unverified:['午后成交未核验','cf-pending'],
   pending:['待行情成交','cf-pending'],
   ran:['盘中未触及挂单价','cf-ran'],
   open_locked:['开盘涨停未成交','cf-locked'],
@@ -1024,7 +1026,7 @@ function renderConsensus(){
       <div class="consensus-empty">本批次在场模型不足 2 个，暂无共识结果</div></div>`;
     return;
   }
-  const presentN=Object.keys(co.models||{}).filter(k=>k!=='ensemble').length;
+  const presentN=Object.keys(co.models||{}).filter(k=>!['ensemble','quality','hot100'].includes(k)).length;
   const slots=rows.filter(r=>0<r.slot&&r.slot<=5).sort((a,b)=>a.slot-b.slot);
   const alts=rows.filter(r=>r.alt>0).sort((a,b)=>a.alt-b.alt);
   const card=(r,tag,isAlt)=>{
@@ -1201,6 +1203,10 @@ quoteDialog.addEventListener('click',e=>{
   if(e.target!==quoteDialog)return;
   const r=quoteDialog.getBoundingClientRect();
   if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)quoteDialog.close();
+});
+document.getElementById('selection-wrap').addEventListener('click',e=>{
+  const card=e.target.closest('[data-quote-code]');if(!card)return;
+  e.preventDefault();openQuote(card.dataset.quoteCode,card.dataset.quoteName);
 });
 document.getElementById('consensus-wrap').addEventListener('click',e=>{
   const card=e.target.closest('[data-quote-code]');if(!card)return;
@@ -1397,11 +1403,47 @@ function renderSystemStatus(){
   ].filter(Boolean);
   document.getElementById('system-status').innerHTML=chips.join('');
 }
+let selectionCohort='';
+function renderSelection(){
+  const wrap=document.getElementById('selection-wrap');
+  const entries=DATA.selection||{};
+  const keys=Object.keys(entries).filter(k=>(k.endsWith('pm')?'pm':'am')===session).sort();
+  if(!keys.length){
+    wrap.innerHTML='<div class="consensus-card"><h3>质量精选 · 等待首个有效批次</h3><p class="overlap-meta">全主板初筛 → 最多400只深筛 → 最多100只候选 → 最多10只重点。检查流动性、趋势、过热、波动及行业集中度，不凑数。新规则尚无前向验证结果，将从下一次定时选股开始积累。</p></div>';
+    return;
+  }
+  if(!keys.includes(selectionCohort))selectionCohort=keys[keys.length-1];
+  const key=selectionCohort, node=entries[key], report=node.report;
+  const rows=((DATA.holdings[key]||{}).quality||[]);
+  const focus=rows.filter(r=>r.selection?.focus_rank).sort((a,b)=>a.selection.focus_rank-b.selection.focus_rank);
+  const card=r=>{
+    const s=r.selection||{};
+    return `<details class="overlap-pair"><summary><span class="overlap-names">${esc(r.name)} <small>${esc(r.code)} · ${esc(s.sector)}</small></span><b>${Number(r.pick_score).toFixed(1)} 分</b></summary>
+      <div class="overlap-stocks"><button class="overlap-stock" data-quote-code="${esc(r.code)}" data-quote-name="${esc(r.name)}">查看分时图</button>
+      <span class="overlap-meta">${Object.entries(s.factors||{}).map(([k,v])=>esc(k)+' '+Number(v).toFixed(1)).join(' · ')}<br>
+      ATR波幅 ${s.atr_pct}% · 5日涨幅 ${s.return5_pct}% · 20日涨幅 ${s.return20_pct}%<br>
+      信号价 ${s.quote_price} · 行情时间 ${esc(s.quote_at)}<br>重点行业最多2只；规则分不是盈利概率。</span></div></details>`;
+  };
+  const metrics=node.metrics[basis==='close'?'close':'open'];
+  const table=['focus','pool','hot100'].map(group=>`<tr><td>${{focus:'重点名单',pool:'全部候选',hot100:'同期热榜'}[group]}</td>${['1','3','5'].map(h=>{
+    const m=metrics[h][group];
+    return `<td>${m.complete?`${pct(m.mean)}<br><small>胜率 ${(m.win*100).toFixed(1)}%${m.edge==null?'':' · 超额 '+pct(m.edge)}</small>`:'待完整数据'}<br><small>${m.verified}/${m.expected} 已核验</small></td>`;
+  }).join('')}</tr>`).join('');
+  wrap.innerHTML=`<div class="consensus-card">
+    <div class="overlap-head"><h3>质量精选 · 重点 ${report.focus_count} / 候选 ${report.pool_count}</h3>
+    <select id="selection-cohort" aria-label="质量精选批次">${keys.slice().reverse().map(k=>`<option value="${k}" ${k===key?'selected':''}>${k}</option>`).join('')}</select></div>
+    <p class="overlap-meta">试运行 · ${esc(report.version)} · ${esc(report.signal_at)}<br>扫描 ${report.market_count} 只 → 初筛 ${report.preliminary_count} 只 → 深筛 ${report.deep_count} 只，日K核验 ${(report.coverage*100).toFixed(1)}% · 历史截至 ${esc(report.history_through)}</p>
+    <div class="consensus-grid">${focus.length?focus.map(card).join(''):'<p class="overlap-empty">本批次没有达到重点门槛的股票，保留空位。</p>'}</div>
+    <details class="overlap-more"><summary>查看全部候选与淘汰原因</summary><p class="overlap-meta">${Object.entries(report.rejected||{}).map(([k,v])=>esc(k)+' '+v+'只').join(' · ')}<br>${esc(report.note)}</p><div class="consensus-grid">${rows.map(card).join('')}</div></details>
+    <div class="overlap-matrix"><table><thead><tr><th>冻结名单前向验证</th><th>D+1</th><th>D+3</th><th>D+5</th></tr></thead><tbody>${table}</tbody></table></div>
+    <p class="overlap-meta">均值已扣 ${DATA.cost_bps}bp 估算成本，胜率按净收益计算。${basis==='close'?'收盘价':'信号入场价'}的理论持有收益，非实盘成交；整份名单全部有经复权核验的数据才显示。超额=本组均值−同期热榜全名单均值。尚未证明稳定优于基准。</p></div>`;
+  document.getElementById('selection-cohort').onchange=e=>{selectionCohort=e.target.value;renderSelection();};
+}
 function renderAll(){
   if(!DATA)return;
   document.querySelector('#basis-grp [data-b="open"]').textContent=session==='pm'?'上午收盘固定价买入':'开盘价买入';
   document.querySelectorAll('.toolbar button').forEach(b=>b.setAttribute('aria-pressed',String(b.classList.contains('on'))));
-  renderKPIs();renderSystemStatus();renderConsensus();renderQuality();renderPlan();renderTable();renderHoldings();renderBar();
+  renderKPIs();renderSystemStatus();renderSelection();renderConsensus();renderQuality();renderPlan();renderTable();renderHoldings();renderBar();
   renderWin();renderPath();renderExec();renderFillRate();renderBox();renderNav();renderHeat();renderCohorts();
 }
 
