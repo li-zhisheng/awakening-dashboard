@@ -1062,8 +1062,8 @@ function drawMinuteQuote(q){
       areaStyle:{color:'rgba(103,201,255,.06)'},
       markPoint:{symbol:'circle',symbolSize:7,silent:true,data:markers},
       markLine:{silent:true,symbol:'none',
-        label:{show:true,position:'start',distance:8,color:'#e5ecf7',fontSize:11,lineHeight:15,
-          backgroundColor:'#101827',padding:[2,0],formatter:`${q.prev.toFixed(2)}\n昨收 0%`},
+        label:{show:true,position:'start',distance:8,color:'#fbbf24',fontSize:11,fontWeight:700,lineHeight:15,
+          backgroundColor:'#101827',padding:[2,0],formatter:q.prev.toFixed(2)},
         lineStyle:{type:'dashed',color:'#94a3b8'},data:[{yAxis:q.prev}]}}]
   },true);
   quoteEl('chart').setAttribute('aria-label',`${q.date} 分时价格走势图，昨收 ${q.prev.toFixed(2)} 元，现价 ${q.price.toFixed(2)} 元`);
