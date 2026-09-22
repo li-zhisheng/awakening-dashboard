@@ -15,6 +15,11 @@
     const state=!key?'missing':date8(key)===today?'today':date8(key)<today?'historical':'future';
     return {key,today,state};
   }
+  function latestSession(data){
+    const keys=[...Object.keys(data.holdings||{}),...Object.keys(data.selection||{})]
+      .filter(k=>/^\d{8}(pm)?$/.test(k)).sort();
+    return keys.length?sessionOf(keys[keys.length-1]):'am';
+  }
   function stockIndex(data,cohort){
     const stocks=new Map();
     const names=new Map((data.models||[]).map(m=>[m.key,m.name]));
@@ -71,7 +76,7 @@
     if(!row.verified?.[b]?.[horizon])return {status:'uncorrected'};
     return {status:'ready',value:path[0]-cost,mfe:path[1],mae:path[2]};
   }
-  const api={date8,sessionOf,beijingDay,freshness,stockIndex,filterStocks,stocksCSV,holdingReturn};
+  const api={date8,sessionOf,beijingDay,freshness,latestSession,stockIndex,filterStocks,stocksCSV,holdingReturn};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   else root.DashboardTools=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

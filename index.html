@@ -623,6 +623,7 @@
 <script>
 let DATA=null, basis='open', metric='top5', distH=5, session='am';
 let sampleMode='common';
+let sessionChosen=false;
 let _lastSig='';
 const _CACHE_KEY='aw_quant_dash_v1';
 let selModel='', selCohort='';
@@ -1589,6 +1590,8 @@ function renderSelection(){
 }
 function renderAll(){
   if(!DATA)return;
+  if(!sessionChosen)session=DashboardTools.latestSession(DATA);
+  document.querySelectorAll('#session-grp button').forEach(b=>b.classList.toggle('on',b.dataset.s===session));
   document.querySelector('#basis-grp [data-b="open"]').textContent=session==='pm'?'上午收盘固定价买入':'开盘价买入';
   document.querySelectorAll('.toolbar button').forEach(b=>b.setAttribute('aria-pressed',String(b.classList.contains('on'))));
   renderFreshness();renderSystemStatus();renderSelection();renderConsensus();renderPlan();renderExplorer();renderResearch();
@@ -1602,6 +1605,7 @@ document.getElementById('sample-grp').onclick=e=>{
 };
 document.getElementById('session-grp').onclick=e=>{
   const b=e.target.closest('button');if(!b)return;session=b.dataset.s;
+  sessionChosen=true;
   document.querySelectorAll('#session-grp button').forEach(x=>x.classList.toggle('on',x===b));
   selCohort='';   // 切场次后明细批次默认取该场最新
   explorerCohort='';explorerLimit=20;selectionCohort='';
