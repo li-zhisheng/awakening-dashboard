@@ -585,8 +585,8 @@
     <div class="desc">看清「给过赚钱机会却回落」与「真实盘中回撤」——比只看最终收益更能反映持有体验</div>
     <div class="chart" id="pathChart"></div></div>
 
-  <div class="card span2"><h3>入场执行质量</h3>
-    <div class="desc">全名单诊断：早盘展示开盘跳空、当日O→C与振幅；午盘入场价固定为上午收盘价，展示固定价至当日收盘的涨幅。</div>
+  <div class="card span2"><h3>入场到收盘 · 实际盈亏</h3>
+    <div class="desc">统一口径：每只股票只算「实际入场价 → 当日收盘价」的涨跌，即你买入后真实持有的浮盈；不看该股当天整体涨跌幅。早盘入场价=开盘价，午盘入场价=上午收盘固定价。全名单平均，基于真实日K估算，非券商成交记录。</div>
     <div class="chart" id="execChart"></div></div>
 
   <div class="card span2"><h3 id="fill-title">槽位填充率（最近批次 · 5只实际买到几只）</h3>
@@ -922,21 +922,26 @@ function renderPath(){
     (session==='am'?'早盘':'午盘')+`Top5 盈亏路径 D+${distH}：价格浮盈 / 净收益 / 最大跌幅`;
 }
 
-/* entry execution quality */
+/* entry-to-close P&L */
 function renderExec(){
-  const g=(k)=>realModels().map(m=>{const v=m[session]['exec'][k];return v==null?null:+(v*100).toFixed(2);});
-  const seriesDef=session==='am'
-    ?[['开盘跳空','gap','#818cf8'],['当日O→C','oc','#fb7185'],['振幅','amp','#fbbf24']]
-    :[['固定价(上午收)→当日收','oc','#fb7185']];
+  const data=realModels().map(m=>{
+    const v=m[session]['exec']['oc'];
+    return v==null?null:{value:+(v*100).toFixed(2),
+      itemStyle:{color:v>=0?'#34d399':'#fb7185'}};
+  });
   chart('execChart').setOption({
     animation:fxEnabled&&!reducedMotion.matches,
-    tooltip:{trigger:'axis',...tip,valueFormatter:v=>v==null?'—':v+'%'},
-    legend:{top:6,textStyle:{color:'#8b9bb8'}},
+    tooltip:{trigger:'axis',...tip,formatter:ps=>{
+      const p=Array.isArray(ps)?ps[0]:ps;
+      const v=p.data?.value;
+      return `${esc(p.name)}<br/>入场到收盘 ${v==null?'—':(v>0?'+':'')+v+'%'}`;}},
     grid:baseGrid,
     xAxis:{type:'category',data:names(),...axisStyle},
-    yAxis:{type:'value',name:'%',...axisStyle},
-    series:seriesDef.map(([nm,k,col])=>(
-      {name:nm,type:'bar',data:g(k),itemStyle:{color:col},barMaxWidth:22}))
+    yAxis:{type:'value',name:'实际盈亏%',...axisStyle},
+    series:[{name:'入场→收盘',type:'bar',data,barMaxWidth:30,
+      label:{show:true,position:'top',color:'#c8d6ee',
+        formatter:p=>p.value==null?'':(p.value>0?'+':'')+p.value+'%'},
+      markLine:{symbol:'none',data:[{yAxis:0}],lineStyle:{color:'#fbbf24',width:1.5}}}]
   },true);
 }
 
