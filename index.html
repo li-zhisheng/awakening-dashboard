@@ -586,7 +586,7 @@
     <div class="chart" id="pathChart"></div></div>
 
   <div class="card span2"><h3>入场到收盘 · 实际盈亏</h3>
-    <div class="desc">统一口径：每只股票只算「实际入场价 → 当日收盘价」的涨跌，即你买入后真实持有的浮盈；不看该股当天整体涨跌幅。早盘入场价=开盘价，午盘入场价=上午收盘固定价。全名单平均，基于真实日K估算，非券商成交记录。</div>
+    <div class="desc">只统计<b>确认真实成交</b>的股票：按实际入场价买入、到当日收盘价的真实浮盈。没买到（开盘/一字涨停、午后未触及挂单价）和成交未核验的票一律不计入，也不冒充0收益。早盘入场价=开盘价，午盘入场价=上午收盘固定价。柱顶/悬停可看该平均值基于几只成交票。基于真实日K估算，非券商成交记录。</div>
     <div class="chart" id="execChart"></div></div>
 
   <div class="card span2"><h3 id="fill-title">槽位填充率（最近批次 · 5只实际买到几只）</h3>
@@ -922,27 +922,31 @@ function renderPath(){
     (session==='am'?'早盘':'午盘')+`Top5 盈亏路径 D+${distH}：价格浮盈 / 净收益 / 最大跌幅`;
 }
 
-/* entry-to-close P&L */
+/* entry-to-close P&L (confirmed fills only) */
 function renderExec(){
   const data=realModels().map(m=>{
-    const raw=m[session]['exec']['oc'];
-    if(raw==null)return null;
+    const ex=m[session]['exec'];
+    const raw=ex['oc'], n=ex['oc_n'];
+    if(raw==null&&n==null)return null;
+    if(n===0)return {value:0,n:0,zeroDeals:true,itemStyle:{color:'#475569'}};
     const value=+(raw*100).toFixed(2);
     const color=value>0?'#34d399':value<0?'#fb7185':'#8b9bb8';
-    return {value,itemStyle:{color}};
+    return {value,n,itemStyle:{color}};
   });
   chart('execChart').setOption({
     animation:fxEnabled&&!reducedMotion.matches,
     tooltip:{trigger:'axis',...tip,formatter:ps=>{
-      const p=Array.isArray(ps)?ps[0]:ps;
-      const v=p.data?.value;
-      return `${esc(p.name)}<br/>入场到收盘 ${v==null?'—':(v>0?'+':'')+v+'%'}`;}},
+      const p=Array.isArray(ps)?ps[0]:ps,d=p.data;
+      if(!d)return esc(p.name);
+      if(d.zeroDeals)return `${esc(p.name)}<br/>本场次无确认成交股票`;
+      const v=d.value;
+      return `${esc(p.name)}<br/>入场到收盘 ${(v>0?'+':'')+v}%<br/>基于 ${d.n} 只确认成交票`;}},
     grid:baseGrid,
     xAxis:{type:'category',data:names(),...axisStyle},
     yAxis:{type:'value',name:'实际盈亏%',...axisStyle},
     series:[{name:'入场→收盘',type:'bar',data,barMaxWidth:30,
       label:{show:true,position:'top',color:'#c8d6ee',
-        formatter:p=>p.value==null?'':(p.value>0?'+':'')+p.value+'%'},
+        formatter:p=>{const d=p.data;if(!d)return'';if(d.zeroDeals)return'无成交';return (d.value>0?'+':'')+d.value+'%';}},
       markLine:{symbol:'none',data:[{yAxis:0}],lineStyle:{color:'#fbbf24',width:1.5}}}]
   },true);
 }
