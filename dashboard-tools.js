@@ -81,7 +81,7 @@
   function holdingReturn(row,basis,horizon,cost=0){
     if(basis==='executed'){
       if(!(row.slot>0&&row.slot<=5))return {status:'outside'};
-      if(['ran','one_line'].includes(row.fill))return {status:'cash',value:0};
+      if(['ran','one_line','open_locked'].includes(row.fill))return {status:'cash',value:0};
       if(row.fill!=='filled')return {status:'unverified'};
     }
     const b=basis==='executed'?'open':basis;
@@ -90,7 +90,49 @@
     if(!row.verified?.[b]?.[horizon])return {status:'uncorrected'};
     return {status:'ready',value:path[0]-cost,mfe:path[1],mae:path[2]};
   }
-  const api={date8,sessionOf,beijingDay,freshness,latestSession,batches,batchLabel,fillBreakdown,stockIndex,filterStocks,stocksCSV,holdingReturn};
+  // 真实收益主表：各实体Top5槽位，只按确认成交计算。
+  // 等权5槽资金：filled→真实收益；ran/one_line/open_locked→现金0(没买到)；
+  // 未核验/未到日不猜值，分别计 unknown/pending；总值按5槽资金口径=Σ/5。
+  function realReturns(data,cohort,cost=0){
+    const holdings=data.holdings?.[cohort]||{};
+    const order=[...(data.models||[]).filter(m=>!m.virtual).map(m=>m.key)];
+    if(!order.includes('quality')&&Array.isArray(holdings.quality))order.push('quality');
+    const names=new Map((data.models||[]).map(m=>[m.key,m.name]));
+    names.set('quality','质量精选 · 独立策略');
+    const colors=new Map((data.models||[]).map(m=>[m.key,m.color]));
+    const cols=['oc','d1','d3','d5'];
+    return order.map(key=>{
+      const rows=holdings[key]||[];
+      const bySlot={};
+      rows.forEach(r=>{if(0<r.slot&&r.slot<=5&&!(r.slot in bySlot))bySlot[r.slot]=r;});
+      const slots=[];
+      for(let s=1;s<=5;s++){
+        const r=bySlot[s];
+        if(!r){slots.push({slot:s,name:'—',oc:'pending',d1:'pending',d3:'pending',d5:'pending'});continue;}
+        const c={slot:s,name:r.name||r.code,code:r.code};
+        const isCash=['ran','one_line','open_locked'].includes(r.fill);
+        c.oc=r.fill==='filled'?(r.oc??'unknown'):isCash?0:'unknown';
+        for(const h of [1,3,5]){
+          const z=holdingReturn(r,'executed',String(h),cost);
+          c['d'+h]=z.status==='ready'?z.value:z.status==='cash'?0
+            :z.status==='pending'?'pending':'unknown';
+        }
+        slots.push(c);
+      }
+      const metrics={};
+      for(const col of cols){
+        let sum=0,unknown=0,pending=0;
+        slots.forEach(c=>{const v=c[col];
+          if(v==='pending')pending++;else if(v==='unknown')unknown++;else sum+=v;});
+        metrics[col]={value:+(sum/5*100).toFixed(2),unknown,pending};
+      }
+      return {key,name:names.get(key)||key,color:colors.get(key)||'',
+        filled:slots.filter(c=>bySlot[c.slot]?.fill==='filled').length,
+        cash:slots.filter(c=>['ran','one_line','open_locked'].includes(bySlot[c.slot]?.fill)).length,
+        slots,metrics};
+    });
+  }
+  const api={date8,sessionOf,beijingDay,freshness,latestSession,batches,batchLabel,fillBreakdown,stockIndex,filterStocks,stocksCSV,holdingReturn,realReturns};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   else root.DashboardTools=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
