@@ -554,8 +554,8 @@
   <span class="cost-note" id="cost-note"></span>
   <span class="lbl">样本</span>
   <div class="grp" id="sample-grp">
-    <button data-sample="common" class="on">共同批次</button>
-    <button data-sample="complete">各模型完整批次</button>
+    <button data-sample="common">共同批次</button>
+    <button data-sample="complete" class="on">各模型完整批次</button>
   </div>
 </div>
 
@@ -565,7 +565,7 @@
 <div class="grid">
   <div class="card span2">
     <h3>总排名（点表头排序 · 点模型名看选股明细）</h3>
-    <div class="desc">Top5 五股齐全才计入；共同批次要求所有参赛模型在同一批次均完整。RankIC 先按批次完整名单计算（至少10股），再等权平均。少于20批仅作观察，重叠批次不视为独立样本。</div>
+    <div class="desc">默认“各模型完整批次”：该模型前五股行情与复权核验齐全即计入，不因其他模型缺名单而清零。“共同批次”为严格对照，要求所有参赛模型在同一批次均完整；早盘常有模型缺名单，此时共同批次可能为0，属口径较严，并非系统无数据。RankIC 先按批次完整名单计算（至少10股）再等权平均；少于20批仅作观察，重叠批次不视为独立样本。</div>
     <div class="table-wrap"><table id="rank-table"></table></div>
   </div>
 
@@ -625,8 +625,7 @@
 </details>
 
 <script>
-let DATA=null, basis='open', metric='top5', distH=5, session='am';
-let sampleMode='common';
+let DATA=null, basis='open', metric='top5', distH=5, session='am', sampleMode='complete';
 let sessionChosen=false;
 let activeBatch='';
 function currentCohort(){
