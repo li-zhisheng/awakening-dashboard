@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#080d1b">
 <title>量化交易 · 选股质量看板</title>
 <script src="echarts.min.js"></script>
-<script src="dashboard-tools.js"></script>
+<script src="dashboard-tools.js?v=3d8344888e5d41f1"></script>
 <style>
   :root{
     --bg:#0a0f1e; --panel:#121a2e; --panel2:#0e1526;
@@ -1590,7 +1590,10 @@ function renderSelection(){
 }
 function renderAll(){
   if(!DATA)return;
-  if(!sessionChosen)session=DashboardTools.latestSession(DATA);
+  if(!sessionChosen){
+    const latest=Object.keys(DATA.holdings||{}).sort().pop()||'';
+    session=typeof DashboardTools.latestSession==='function'?DashboardTools.latestSession(DATA):(latest.endsWith('pm')?'pm':'am');
+  }
   document.querySelectorAll('#session-grp button').forEach(b=>b.classList.toggle('on',b.dataset.s===session));
   document.querySelector('#basis-grp [data-b="open"]').textContent=session==='pm'?'上午收盘固定价买入':'开盘价买入';
   document.querySelectorAll('.toolbar button').forEach(b=>b.setAttribute('aria-pressed',String(b.classList.contains('on'))));
