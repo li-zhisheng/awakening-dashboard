@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#080d1b">
 <title>量化交易 · 选股质量看板</title>
 <script src="echarts.min.js"></script>
-<script src="dashboard-tools.js?v=3d8344888e5d41f1"></script>
+<script src="dashboard-tools.js?v=99e56cfbefebc4fd"></script>
 <style>
   :root{
     --bg:#0a0f1e; --panel:#121a2e; --panel2:#0e1526;
@@ -478,6 +478,9 @@
 
 <nav class="page-nav" aria-label="页面导航"><a href="#selection-wrap">重点名单</a><a href="#explorer">查股票</a><a href="#research">效果复盘</a></nav>
 <div class="toolbar" id="primary-controls">
+  <label class="lbl" for="batch-select">当前批次（全部日期）</label>
+  <select id="batch-select" aria-label="当前批次（全部日期）" style="background:var(--panel);color:var(--txt);padding:8px;border:1px solid #334155;border-radius:7px"></select>
+  <button class="action-btn" id="latest-batch">回到最新批次</button>
   <span class="lbl">选股场次</span>
   <div class="grp" id="session-grp">
     <button data-s="am" class="on">早盘选股</button>
@@ -529,6 +532,7 @@
 <summary>效果复盘与模型对比 <small>全样本、Top5、多周期收益及数据覆盖</small></summary>
 <div class="research-content">
 <div class="toolbar">
+  <span class="lbl">以下排名及收益曲线汇总所选场次的历史批次；名单与成交状态跟随“当前批次”。</span>
   <span class="lbl">入场口径</span>
   <div class="grp" id="basis-grp">
     <button data-b="open" class="on">开盘价买入</button>
@@ -624,6 +628,20 @@
 let DATA=null, basis='open', metric='top5', distH=5, session='am';
 let sampleMode='common';
 let sessionChosen=false;
+let activeBatch='';
+function currentCohort(){
+  return DATA.cohorts.find(c=>(c.cohort||c.date+(c.session==='pm'?'pm':''))===activeBatch);
+}
+function batchOptions(selected){
+  return DashboardTools.batches(DATA).map(k=>`<option value="${esc(k)}" ${k===selected?'selected':''}>${esc(DashboardTools.batchLabel(k))}</option>`).join('');
+}
+function chooseBatch(key){
+  if(!DashboardTools.batches(DATA).includes(key))return;
+  activeBatch=key;session=dirSession(key);sessionChosen=true;
+  explorerLimit=20;renderAll();
+}
+document.getElementById('batch-select').onchange=e=>chooseBatch(e.target.value);
+document.getElementById('latest-batch').onclick=()=>{sessionChosen=false;activeBatch='';renderAll();};
 let _lastSig='';
 const _CACHE_KEY='aw_quant_dash_v1';
 let selModel='', selCohort='';
@@ -768,20 +786,19 @@ function renderTable(){
 function dirSession(d){return d.endsWith('pm')?'pm':'am';}
 function renderHoldHead(){
   const allCohorts=Object.keys(DATA.holdings).sort();
-  const cohorts=allCohorts.filter(d=>dirSession(d)===session);
-  if(!cohorts.includes(selCohort))selCohort=cohorts[cohorts.length-1]||'';
+  selCohort=activeBatch;
   const models=realModels();
   if(!models.some(m=>m.key===selModel))selModel=models[0]?models[0].key:'';
   const m=models.find(x=>x.key===selModel);
   const sessLabel=session==='am'?'早盘':'午盘';
   document.getElementById('hold-head').innerHTML=`
     <select id="hold-model" aria-label="选股模型">${models.map(x=>`<option value="${esc(x.key)}" ${x.key===selModel?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
-    <select id="hold-cohort" aria-label="选股批次">${cohorts.map(c=>`<option value="${esc(c)}" ${c===selCohort?'selected':''}>${sessLabel} ${esc(c)}</option>`).join('')}</select>
+    <select id="hold-cohort" aria-label="选股批次">${batchOptions(selCohort)}</select>
     <span class="pill">${sessLabel} · ${basis==='executed'?'可成交净收益 · 前5槽位':basis==='open'?(session==='am'?'开盘价':'上午收盘固定价'):'收盘价'}</span>
     <span class="pill" style="${m&&m.color?'color:'+m.color:''}">${m?esc(m.name):''}</span>
     <label class="pill"><input type="checkbox" id="show-ohlc" ${showOHLC?'checked':''}> 完整OHLC与执行指标</label>`;
   document.getElementById('hold-model').onchange=e=>{selModel=e.target.value;renderHoldings();};
-  document.getElementById('hold-cohort').onchange=e=>{selCohort=e.target.value;renderHoldings();};
+  document.getElementById('hold-cohort').onchange=e=>chooseBatch(e.target.value);
   document.getElementById('show-ohlc').onchange=e=>{showOHLC=e.target.checked;renderHoldings();};
 }
 function gradeBadge(g){if(!g)return '';
@@ -1016,7 +1033,7 @@ function overlapMatrix(ov,models){
 }
 function renderHeat(){
   const wrap=document.getElementById('overlap-wrap');
-  const co=DATA.cohorts.filter(c=>c.session===session).slice(-1)[0];
+  const co=currentCohort();
   const key=co?co.date+(session==='pm'?'pm':''):'';
   const info=overlapPairs(DATA.holdings[key]||{},DATA.models);
   if(overlapModel&&!info.active.some(m=>m.key===overlapModel))overlapModel='';
@@ -1038,7 +1055,7 @@ function renderHeat(){
     <p class="overlap-meta">${session==='am'?'早盘':'午盘'} · ${esc(co?.date||'暂无批次')} · ${info.active.length} 个模型有有效前五推荐<br>每格代表一只共同股票，点击展开名单与原始排名。比较前五推荐，非实际成交持仓。</p>
     <div class="overlap-list">${pairs||'<p class="overlap-empty">至少需要两个模型有有效前五推荐才能比较。</p>'}</div>
     ${info.empty.length?`<p class="overlap-meta">未参与比较（无有效前五推荐）：${info.empty.map(m=>esc(m.name)).join('、')}</p>`:''}
-    <details class="overlap-more" data-overlap-id="matrix" ${opened.has('matrix')?'open':''}><summary>详细分析 · 全名单相似度</summary>${overlapMatrix(DATA['overlap_'+session],DATA.models)}</details>`;
+    <details class="overlap-more" data-overlap-id="matrix" ${opened.has('matrix')?'open':''}><summary>详细分析 · 全名单相似度（本场次最新批次）</summary>${overlapMatrix(DATA['overlap_'+session],DATA.models)}</details>`;
 }
 document.getElementById('overlap-wrap').addEventListener('change',e=>{
   if(e.target.id==='overlap-model'){overlapModel=e.target.value;renderHeat();}
@@ -1058,8 +1075,8 @@ function renderCohorts(){
     realModels().map(m=>{const x=c.models[m.key];
       if(!x)return '<td><span class="na">—</span></td>';
       if(basis==='executed'){
-        const f=x.fills?.filled||0;
-        return `<td><span class="chip">成交 ${f}/5</span></td>`;
+        const f=DashboardTools.fillBreakdown(x);
+        return `<td><span class="chip">${f.available?`可达${f.filled} · 不可成交${f.blocked} · 待核验${f.unknown} · 空槽${f.vacant}`:'无名单'}</span></td>`;
       }
       const v=x.valid_by_basis?.[basis]||x.valid;
       return `<td><span class="chip">${x.picks}股 · 1/3/5:${v[1]}/${v[3]}/${v[5]}</span></td>`;
@@ -1086,7 +1103,7 @@ function stockSymbol(code){
 function renderConsensus(){
   const wrap=document.getElementById('consensus-wrap');
   const sCohorts=DATA.cohorts.filter(c=>c.session===session);
-  const co=sCohorts[sCohorts.length-1];
+  const co=currentCohort();
   if(!co){wrap.innerHTML='';return;}
   const key=co.date+(session==='pm'?'pm':'');
   const rows=(DATA.holdings[key]||{}).ensemble;
@@ -1095,7 +1112,7 @@ function renderConsensus(){
       <div class="consensus-empty">本批次在场模型不足 2 个，暂无共识结果</div></div>`;
     return;
   }
-  const presentN=Object.keys(co.models||{}).filter(k=>!['ensemble','quality','hot100'].includes(k)).length;
+  const presentN=Object.keys(co.models||{}).filter(k=>!['ensemble','quality','hot100'].includes(k)&&co.models[k].picks>0).length;
   const slots=rows.filter(r=>0<r.slot&&r.slot<=5).sort((a,b)=>a.slot-b.slot);
   const alts=rows.filter(r=>r.alt>0).sort((a,b)=>a.alt-b.alt);
   const card=(r,tag,isAlt)=>{
@@ -1348,7 +1365,7 @@ function renderPlan(){
   const wrap=document.getElementById('plan-wrap');
   const p=DATA.action_plan;
   // 计划只展示与当前场次一致的批次，避免早盘视图混入午盘计划。
-  if(!p||p.session!==session){wrap.innerHTML='';return;}
+  if(!p||p.cohort!==activeBatch){wrap.innerHTML='';return;}
   const sessLabel=p.session==='pm'?'午盘':'早盘';
   const [rlabel,rcls,rhint]=REGIME_META[DATA.regimes?.[p.cohort]]||REGIME_META.unknown;
   const orders=p.orders.map(o=>`
@@ -1387,38 +1404,34 @@ function renderPlan(){
 
 /* fill rate */
 function renderFillRate(){
-  const sCohorts=DATA.cohorts.filter(c=>c.session===session);
-  const c=sCohorts[sCohorts.length-1];
+  const c=currentCohort();
   const ch=chart('fillChart');
   const emptyGraphic=[{type:'text',left:'center',top:'middle',
     style:{text:(session==='am'?'早盘':'午盘')+'暂无批次数据',fill:'#5b6b88',fontSize:14}}];
   if(!c){ch.setOption({graphic:emptyGraphic},true);return;}
-  const vals=realModels().map(m=>{
-    const x=c.models[m.key];
-    const filled=x?.fills?.filled||0;
-    const unresolved=Object.entries(x?.fills||{}).filter(([k])=>!['filled','ran','one_line'].includes(k))
-      .reduce((sum,[,n])=>sum+n,0);
-    return {value:!x?.slots||unresolved?null:+(filled/5*100).toFixed(0),filled,slots:x?.slots||0,unresolved};
-  });
+  const vals=realModels().map(m=>DashboardTools.fillBreakdown(c.models[m.key]));
+  const parts=[['filled','已确认价格可达','#22d3ee'],['blocked','已确认不可成交','#64748b'],
+    ['unknown','待核验','#fbbf24'],['vacant','未分配槽位','#334155']];
+  const missing=realModels().filter((m,i)=>!vals[i].available).map(m=>m.name);
   ch.setOption({
     animation:fxEnabled&&!reducedMotion.matches,
-    graphic:vals.every(v=>v.value==null)?[{type:'text',left:'center',top:'middle',
-      style:{text:'成交证据未齐，暂不显示比例',fill:'#8b9bb8',fontSize:14}}]:[],
+    legend:{data:parts.map(p=>p[1]),textStyle:{color:'#8b9bb8'},top:0},
+    graphic:missing.length?[{type:'text',left:'center',bottom:0,
+      style:{text:'无名单：'+missing.join('、'),fill:'#8b9bb8',fontSize:11}}]:[],
     tooltip:{...tip,trigger:'axis',formatter:ps=>{
       const p=Array.isArray(ps)?ps[0]:ps;
-      const d=p.data;
-      return `${esc(p.name)}<br/>价格可达 ${d.filled}/5 槽 · ${d.unresolved}槽待核验`;}},
-    grid:baseGrid,
+      if(!p)return '';
+      const d=vals[p.dataIndex];
+      return `${esc(p.name)}<br/>`+(d.available?parts.map(([k,label])=>`${label} ${d[k]}只`).join('<br/>'):'该批次无名单');}},
+    grid:{...baseGrid,bottom:70},
     xAxis:{type:'category',data:names(),...axisStyle,axisLabel:{color:'#8b9bb8',rotate:25,fontSize:11}},
-    yAxis:{type:'value',max:100,name:'填充率%',...axisStyle},
-    series:[{type:'bar',barMaxWidth:26,data:vals,
-      label:{show:true,position:'top',color:'#8b9bb8',formatter:'{c}%'},
-      itemStyle:{borderRadius:[5,5,0,0],
-        color:new echarts.graphic.LinearGradient(0,0,0,1,[
-          {offset:0,color:'#22d3ee'},{offset:1,color:'#2563eb'}])}}]
+    yAxis:{type:'value',max:5,minInterval:1,name:'槽位数（最多5只）',...axisStyle},
+    series:parts.map(([k,name,color])=>({name,type:'bar',stack:'slots',barMaxWidth:30,
+      data:vals.map(d=>d.available?d[k]:null),itemStyle:{color},
+      label:{show:true,position:'inside',color:'#fff',formatter:p=>p.value>0?p.value+'只':''}}))
   },true);
   document.getElementById('fill-title').textContent=
-    `价格可成交比例 · ${session==='am'?'早盘':'午盘'} ${c.date}（估算，非实盘）`;
+    `价格可成交状态 · ${session==='am'?'早盘':'午盘'} ${c.date}（每组5槽，非实盘）`;
 }
 
 /* refresh */
@@ -1458,11 +1471,11 @@ async function refresh(){
       document.getElementById('generated').textContent='快照生成于 '+DATA.generated+' 北京时间';
       return;
     }
-    _lastSig=sig;
     DATA=next;loadError=false;
     try{localStorage.setItem(_CACHE_KEY,sig);}catch(_){}
     document.getElementById('generated').textContent='快照生成于 '+DATA.generated+' 北京时间';
     renderAll();
+    _lastSig=sig;
   }catch(e){loadError=true;document.getElementById('generated').textContent='刷新失败'+(DATA?'，保留上次数据':'')+' · '+String(e);}
   finally{refreshing=false;document.getElementById('refresh-btn').disabled=false;setActive(!document.hidden);if(DATA)renderFreshness();}
 }
@@ -1480,7 +1493,8 @@ function renderSystemStatus(){
 }
 let explorerCohort='', explorerSource='all', explorerLimit=20, explorerStocks=[], explorerRows=[];
 function renderFreshness(){
-  const status=DashboardTools.freshness(DATA,session), el=document.getElementById('freshness');
+  const today=DashboardTools.beijingDay(), key=activeBatch;
+  const status={today,key,state:!key?'missing':key.slice(0,8)===today?'today':key.slice(0,8)<today?'historical':'future'}, el=document.getElementById('freshness');
   const label=session==='am'?'早盘':'午盘';
   const titles={
     missing:`尚无${label}名单`,
@@ -1489,13 +1503,14 @@ function renderFreshness(){
     future:`批次日期晚于当前北京时间 · ${status.key}，请核查数据`
   };
   el.classList.toggle('warn',status.state!=='today'||loadError);
-  el.innerHTML=`<strong>${esc(titles[status.state])}</strong><small>北京时间日期 ${status.today} · 快照生成 ${esc(DATA.generated||'未知')} · ${loadError?'刷新失败，保留旧快照':'自动刷新只检查发布更新，分时行情在弹窗单独读取'}</small>`;
+  const keys=DashboardTools.batches(DATA);
+  const coverage=['am','pm'].map(s=>`${s==='am'?'今日早盘':'今日午盘'}：${keys.includes(today+(s==='pm'?'pm':''))?'已有批次':'暂无批次'}`).join(' · ');
+  el.innerHTML=`<strong>${esc(titles[status.state])}</strong><small>${coverage}。上方“当前批次”可直接选择全部日期，联动名单、查股、明细与成交状态。</small><small>北京时间日期 ${status.today} · 快照生成 ${esc(DATA.generated||'未知')} · ${loadError?'刷新失败，保留旧快照':'自动刷新只检查发布更新，分时行情在弹窗单独读取'}</small>`;
 }
 function renderExplorer(){
-  const keys=Object.keys(DATA.holdings||{}).filter(k=>dirSession(k)===session).sort();
-  if(!keys.includes(explorerCohort))explorerCohort=keys[keys.length-1]||'';
+  explorerCohort=activeBatch;
   const co=document.getElementById('stock-cohort');
-  co.innerHTML=keys.slice().reverse().map(k=>`<option value="${esc(k)}" ${k===explorerCohort?'selected':''}>${esc(k)}</option>`).join('');
+  co.innerHTML=batchOptions(explorerCohort);
   explorerStocks=DashboardTools.stockIndex(DATA,explorerCohort);
   const sources=new Map();
   explorerStocks.forEach(s=>s.sources.forEach(x=>sources.set(x.key,x.name)));
@@ -1521,7 +1536,7 @@ function renderExplorerRows(){
 }
 document.getElementById('stock-search').addEventListener('input',()=>{explorerLimit=20;renderExplorerRows();});
 document.getElementById('stock-source').onchange=e=>{explorerSource=e.target.value;explorerLimit=20;renderExplorerRows();};
-document.getElementById('stock-cohort').onchange=e=>{explorerCohort=e.target.value;explorerLimit=20;renderExplorer();};
+document.getElementById('stock-cohort').onchange=e=>chooseBatch(e.target.value);
 document.getElementById('stock-more').onclick=()=>{explorerLimit+=20;renderExplorerRows();};
 document.getElementById('stock-export').onclick=()=>{
   const url=URL.createObjectURL(new Blob([DashboardTools.stocksCSV(explorerRows,explorerCohort)],{type:'text/csv;charset=utf-8'}));
@@ -1556,11 +1571,12 @@ function renderSelection(){
   const wrap=document.getElementById('selection-wrap');
   const entries=DATA.selection||{};
   const keys=Object.keys(entries).filter(k=>(k.endsWith('pm')?'pm':'am')===session).sort();
-  if(!keys.length){
-    wrap.innerHTML=`<div class="consensus-card"><h3>独立策略 · 质量精选</h3><p class="overlap-meta">由本助手设计 · 趋势向上、流动性充足、不过热、波动可控。独立筛选与统计，不加入共识重复投票。</p><p class="overlap-meta">等待首个有效批次 · 已接入早盘/午盘定时选股；行情与覆盖校验通过后生成最多100只候选、10只重点。暂无已验证收益。</p>${selectionMethod()}</div>`;
+  if(!entries[activeBatch]){
+    wrap.innerHTML=`<div class="consensus-card"><h3>独立策略 · 质量精选</h3><p class="overlap-meta">${esc(DashboardTools.batchLabel(activeBatch))}没有质量精选记录，不显示其他日期名单。</p><label>切换批次 <select id="selection-cohort" aria-label="质量精选批次">${batchOptions(activeBatch)}</select></label>${selectionMethod()}</div>`;
+    document.getElementById('selection-cohort').onchange=e=>chooseBatch(e.target.value);
     return;
   }
-  if(!keys.includes(selectionCohort))selectionCohort=keys[keys.length-1];
+  selectionCohort=activeBatch;
   const key=selectionCohort, node=entries[key], report=node.report;
   const rows=((DATA.holdings[key]||{}).quality||[]);
   const focus=rows.filter(r=>r.selection?.focus_rank).sort((a,b)=>a.selection.focus_rank-b.selection.focus_rank);
@@ -1579,21 +1595,23 @@ function renderSelection(){
   }).join('')}</tr>`).join('');
   wrap.innerHTML=`<div class="consensus-card">
     <div class="overlap-head"><h3>独立策略 · 质量精选 · 重点 ${report.focus_count} / 候选 ${report.pool_count}</h3>
-    <select id="selection-cohort" aria-label="质量精选批次">${keys.slice().reverse().map(k=>`<option value="${k}" ${k===key?'selected':''}>${k}</option>`).join('')}</select></div>
+    <select id="selection-cohort" aria-label="质量精选批次">${batchOptions(key)}</select></div>
     <p class="overlap-meta">试运行 · ${esc(report.version)} · ${esc(report.signal_at)}<br>扫描 ${report.market_count} 只 → 初筛 ${report.preliminary_count} 只 → 深筛 ${report.deep_count} 只，日K核验 ${(report.coverage*100).toFixed(1)}% · 历史截至 ${esc(report.history_through)}</p>
     ${selectionMethod(report)}
     <div class="consensus-grid">${focus.length?focus.map(card).join(''):'<p class="overlap-empty">本批次没有达到重点门槛的股票，保留空位。</p>'}</div>
     <details class="overlap-more"><summary>查看全部候选与淘汰原因</summary><p class="overlap-meta">${Object.entries(report.rejected||{}).map(([k,v])=>esc(k)+' '+v+'只').join(' · ')}<br>${esc(report.note)}</p><div class="consensus-grid">${rows.map(card).join('')}</div></details>
     <div class="overlap-matrix"><table><thead><tr><th>冻结名单前向验证</th><th>D+1</th><th>D+3</th><th>D+5</th></tr></thead><tbody>${table}</tbody></table></div>
     <p class="overlap-meta">均值已扣 ${DATA.cost_bps}bp 估算成本，胜率按净收益计算。${basis==='close'?'收盘价':'信号入场价'}的理论持有收益，非实盘成交；整份名单全部有经复权核验的数据才显示。超额=本组均值−同期热榜全名单均值。尚未证明稳定优于基准。</p></div>`;
-  document.getElementById('selection-cohort').onchange=e=>{selectionCohort=e.target.value;renderSelection();};
+  document.getElementById('selection-cohort').onchange=e=>chooseBatch(e.target.value);
 }
 function renderAll(){
   if(!DATA)return;
-  if(!sessionChosen){
-    const latest=Object.keys(DATA.holdings||{}).sort().pop()||'';
-    session=typeof DashboardTools.latestSession==='function'?DashboardTools.latestSession(DATA):(latest.endsWith('pm')?'pm':'am');
-  }
+  const keys=DashboardTools.batches(DATA);
+  if(!sessionChosen)activeBatch=keys[0]||'';
+  if(activeBatch&&!keys.includes(activeBatch))activeBatch=keys[0]||'';
+  if(activeBatch)session=dirSession(activeBatch);
+  selCohort=selectionCohort=explorerCohort=activeBatch;
+  document.getElementById('batch-select').innerHTML=batchOptions(activeBatch);
   document.querySelectorAll('#session-grp button').forEach(b=>b.classList.toggle('on',b.dataset.s===session));
   document.querySelector('#basis-grp [data-b="open"]').textContent=session==='pm'?'上午收盘固定价买入':'开盘价买入';
   document.querySelectorAll('.toolbar button').forEach(b=>b.setAttribute('aria-pressed',String(b.classList.contains('on'))));
@@ -1609,6 +1627,7 @@ document.getElementById('sample-grp').onclick=e=>{
 document.getElementById('session-grp').onclick=e=>{
   const b=e.target.closest('button');if(!b)return;session=b.dataset.s;
   sessionChosen=true;
+  activeBatch=DashboardTools.batches(DATA).find(k=>dirSession(k)===session)||'';
   document.querySelectorAll('#session-grp button').forEach(x=>x.classList.toggle('on',x===b));
   selCohort='';   // 切场次后明细批次默认取该场最新
   explorerCohort='';explorerLimit=20;selectionCohort='';
@@ -1633,7 +1652,7 @@ document.getElementById('horizon-grp').onclick=e=>{
 document.getElementById('rank-table').addEventListener('click',e=>{
   const el=e.target.closest('.mlink');if(!el)return;
   selModel=el.dataset.model;
-  selCohort=Object.keys(DATA.holdings).filter(d=>dirSession(d)===session).sort().pop()||'';
+  selCohort=activeBatch;
   renderHoldings();
   document.getElementById('hold-table').scrollIntoView({behavior:reducedMotion.matches?'auto':'smooth',block:'center'});
 });

@@ -20,6 +20,20 @@
       .filter(k=>/^\d{8}(pm)?$/.test(k)).sort();
     return keys.length?sessionOf(keys[keys.length-1]):'am';
   }
+  function batches(data){
+    return [...new Set([...Object.keys(data.holdings||{}),...Object.keys(data.selection||{})])]
+      .filter(k=>/^\d{8}(pm)?$/.test(k)).sort().reverse();
+  }
+  function batchLabel(key){
+    return `${String(key).slice(0,4)}-${String(key).slice(4,6)}-${String(key).slice(6,8)} · ${sessionOf(key)==='pm'?'午盘':'早盘'}`;
+  }
+  function fillBreakdown(model){
+    if(!model?.picks)return {available:false,filled:0,blocked:0,unknown:0,vacant:0};
+    const f=model.fills||{}, filled=f.filled||0;
+    const blocked=(f.ran||0)+(f.one_line||0)+(f.open_locked||0);
+    const slots=model.slots||0;
+    return {available:true,filled,blocked,unknown:Math.max(0,slots-filled-blocked),vacant:Math.max(0,5-slots)};
+  }
   function stockIndex(data,cohort){
     const stocks=new Map();
     const names=new Map((data.models||[]).map(m=>[m.key,m.name]));
@@ -76,7 +90,7 @@
     if(!row.verified?.[b]?.[horizon])return {status:'uncorrected'};
     return {status:'ready',value:path[0]-cost,mfe:path[1],mae:path[2]};
   }
-  const api={date8,sessionOf,beijingDay,freshness,latestSession,stockIndex,filterStocks,stocksCSV,holdingReturn};
+  const api={date8,sessionOf,beijingDay,freshness,latestSession,batches,batchLabel,fillBreakdown,stockIndex,filterStocks,stocksCSV,holdingReturn};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   else root.DashboardTools=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
