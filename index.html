@@ -1470,13 +1470,20 @@ function renderFillRate(){
 }
 
 /* refresh */
+let snapshotTag='', pendingSnapshotTag='';
 async function fetchSnapshot(attempts=3){
   // 连接建立阶段的瞬时抖动(ERR_SOCKET_NOT_CONNECTED等)本轮内快速重试, 不必等30s。
   for(let i=0;i<attempts;i++){
     const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),15000);
     try{
-      const r=await fetch('data.json',{cache:'no-store',signal:ctrl.signal});
-      if(r.ok)return await r.json();
+      const headers=snapshotTag&&DATA?{'If-None-Match':snapshotTag}:{};
+      const r=await fetch('data.json',{cache:'no-cache',headers,signal:ctrl.signal});
+      if(r.status===304&&DATA){pendingSnapshotTag=snapshotTag;return DATA;}
+      if(r.ok){
+        pendingSnapshotTag=r.headers.get('ETag')||'';
+        if(DATA&&snapshotTag&&pendingSnapshotTag===snapshotTag)return DATA;
+        return await r.json();
+      }
       throw new Error('HTTP '+r.status);
     }catch(e){
       if(i===attempts-1)throw e;
@@ -1493,6 +1500,7 @@ async function refresh(){
     try{
       next=await fetchSnapshot();
     }catch(first){
+      pendingSnapshotTag='';
       // 本地server备用入口(GitHub Pages上此步快速404, 无副作用)
       const r=await fetch('/api/data',{cache:'no-store'});
       if(!r.ok)throw first;
@@ -1500,8 +1508,9 @@ async function refresh(){
     }
     if(next.error||!Array.isArray(next.models)||!next.holdings||!next.curves)throw new Error(next.error||'数据格式不完整');
     // 指纹比对：数据没变就跳过重绘(看板一天只变3次, 95%轮询为空轮)。
-    const sig=JSON.stringify(next);
+    const sig=next===DATA?_lastSig:JSON.stringify(next);
     if(sig===_lastSig){
+      snapshotTag=pendingSnapshotTag;
       loadError=false;
       document.getElementById('generated').textContent='快照生成于 '+DATA.generated+' 北京时间';
       return;
@@ -1511,6 +1520,7 @@ async function refresh(){
     document.getElementById('generated').textContent='快照生成于 '+DATA.generated+' 北京时间';
     renderAll();
     _lastSig=sig;
+    snapshotTag=pendingSnapshotTag;
   }catch(e){loadError=true;document.getElementById('generated').textContent='刷新失败'+(DATA?'，保留上次数据':'')+' · '+String(e);}
   finally{refreshing=false;document.getElementById('refresh-btn').disabled=false;setActive(!document.hidden);if(DATA)renderFreshness();}
 }
