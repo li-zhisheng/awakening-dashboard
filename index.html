@@ -1542,12 +1542,21 @@ function renderResearch(){
 document.getElementById('research').addEventListener('toggle',renderResearch);
 document.querySelector('a[href="#research"]').addEventListener('click',()=>{document.getElementById('research').open=true;});
 let selectionCohort='';
+function selectionMethod(report){
+  const definition=report?.definition||(!report||report.version===DATA.selection_strategy?.version?DATA.selection_strategy:null);
+  if(!definition)return '<p class="overlap-meta">本批次尚无冻结的完整策略说明，以批次版本和已保存参数为准。</p>';
+  return `<details class="overlap-more"><summary>我的选股逻辑 · ${esc(definition.version)}</summary>
+    <p class="overlap-meta">${esc(definition.designer)} · ${esc(definition.thesis)}</p>
+    <div class="stock-list">${Object.entries(definition.weights||{}).map(([name,weight])=>`<div class="stock-item"><b>${esc(name)}</b><small>最高 ${Number(weight)} 分</small></div>`).join('')}</div>
+    <ol class="overlap-meta" style="padding-left:20px">${(definition.rules||[]).map(rule=>`<li>${esc(rule)}</li>`).join('')}</ol>
+    <p class="overlap-meta">${esc(definition.discipline)}<br>${esc(definition.evaluation)}<br>${esc(definition.limits)}</p></details>`;
+}
 function renderSelection(){
   const wrap=document.getElementById('selection-wrap');
   const entries=DATA.selection||{};
   const keys=Object.keys(entries).filter(k=>(k.endsWith('pm')?'pm':'am')===session).sort();
   if(!keys.length){
-    wrap.innerHTML='<div class="consensus-card"><h3>质量精选 · 等待首个有效批次</h3><p class="overlap-meta">全主板初筛 → 最多400只深筛 → 最多100只候选 → 最多10只重点。检查流动性、趋势、过热、波动及行业集中度，不凑数。新规则尚无前向验证结果，将从下一次定时选股开始积累。</p></div>';
+    wrap.innerHTML=`<div class="consensus-card"><h3>独立策略 · 质量精选</h3><p class="overlap-meta">由本助手设计 · 趋势向上、流动性充足、不过热、波动可控。独立筛选与统计，不加入共识重复投票。</p><p class="overlap-meta">等待首个有效批次 · 已接入早盘/午盘定时选股；行情与覆盖校验通过后生成最多100只候选、10只重点。暂无已验证收益。</p>${selectionMethod()}</div>`;
     return;
   }
   if(!keys.includes(selectionCohort))selectionCohort=keys[keys.length-1];
@@ -1568,9 +1577,10 @@ function renderSelection(){
     return `<td>${m.complete?`${pct(m.mean)}<br><small>胜率 ${(m.win*100).toFixed(1)}%${m.edge==null?'':' · 超额 '+pct(m.edge)}</small>`:'待完整数据'}<br><small>${m.verified}/${m.expected} 已核验</small></td>`;
   }).join('')}</tr>`).join('');
   wrap.innerHTML=`<div class="consensus-card">
-    <div class="overlap-head"><h3>质量精选 · 重点 ${report.focus_count} / 候选 ${report.pool_count}</h3>
+    <div class="overlap-head"><h3>独立策略 · 质量精选 · 重点 ${report.focus_count} / 候选 ${report.pool_count}</h3>
     <select id="selection-cohort" aria-label="质量精选批次">${keys.slice().reverse().map(k=>`<option value="${k}" ${k===key?'selected':''}>${k}</option>`).join('')}</select></div>
     <p class="overlap-meta">试运行 · ${esc(report.version)} · ${esc(report.signal_at)}<br>扫描 ${report.market_count} 只 → 初筛 ${report.preliminary_count} 只 → 深筛 ${report.deep_count} 只，日K核验 ${(report.coverage*100).toFixed(1)}% · 历史截至 ${esc(report.history_through)}</p>
+    ${selectionMethod(report)}
     <div class="consensus-grid">${focus.length?focus.map(card).join(''):'<p class="overlap-empty">本批次没有达到重点门槛的股票，保留空位。</p>'}</div>
     <details class="overlap-more"><summary>查看全部候选与淘汰原因</summary><p class="overlap-meta">${Object.entries(report.rejected||{}).map(([k,v])=>esc(k)+' '+v+'只').join(' · ')}<br>${esc(report.note)}</p><div class="consensus-grid">${rows.map(card).join('')}</div></details>
     <div class="overlap-matrix"><table><thead><tr><th>冻结名单前向验证</th><th>D+1</th><th>D+3</th><th>D+5</th></tr></thead><tbody>${table}</tbody></table></div>
