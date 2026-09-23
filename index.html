@@ -606,7 +606,7 @@
   <div class="card"><h3>Top5 净胜率（净收益&gt;0占比）</h3>
     <div class="desc">虚线为50%基准</div><div class="chart" id="winChart"></div></div>
 
-  <div class="card span2"><h3 id="path-title">盈亏路径：最大浮盈 / 最终收益 / 最大回撤</h3>
+  <div class="card span2"><h3 id="path-title">盈亏路径：最大浮盈 / 最大浮亏 / 最终净收益</h3>
     <div class="desc">看清「给过赚钱机会却回落」与「真实盘中回撤」——比只看最终收益更能反映持有体验</div>
     <div class="chart" id="pathChart"></div></div>
 
@@ -924,14 +924,14 @@ function renderWin(){
   },true);
 }
 
-/* path: MFE / final / MAE */
+/* path: MFE / MAE / final */
 function renderPath(){
   const c=m=>{const x=buyCell(m,distH);
     return [x.mfe==null?null:+(x.mfe*100).toFixed(2),
-            x.mean==null?null:+(x.mean*100).toFixed(2),
-            x.mae==null?null:+(-x.mae*100).toFixed(2)];};
-  const mfe=[],fin=[],mae=[];
-  realModels().forEach(m=>{const a=c(m);mfe.push(a[0]);fin.push(a[1]);mae.push(a[2]);});
+            x.mae==null?null:+(-x.mae*100).toFixed(2),
+            x.mean==null?null:+(x.mean*100).toFixed(2)];};
+  const mfe=[],mae=[],fin=[];
+  realModels().forEach(m=>{const a=c(m);mfe.push(a[0]);mae.push(a[1]);fin.push(a[2]);});
   chart('pathChart').setOption({
     animation:fxEnabled&&!reducedMotion.matches,
     tooltip:{trigger:'axis',...tip,valueFormatter:v=>v==null?'—':v+'%'},
@@ -940,13 +940,13 @@ function renderPath(){
     xAxis:{type:'category',data:names(),...axisStyle,axisLabel:modelAxisLabel},
     yAxis:{type:'value',name:'%',...axisStyle},
     series:[
-      {name:'最大浮盈MFE',type:'bar',data:mfe,itemStyle:{color:'#f6465d'},barMaxWidth:20},
-      {name:'最终净收益',type:'bar',data:fin,itemStyle:{color:'#22d3ee'},barMaxWidth:20},
-      {name:'最大跌幅MAE',type:'bar',data:mae,itemStyle:{color:'#1fc28a'},barMaxWidth:20}
+      {name:'最大浮盈',type:'bar',data:mfe,itemStyle:{color:'#f6465d'},barMaxWidth:20},
+      {name:'最大浮亏',type:'bar',data:mae,itemStyle:{color:'#1fc28a'},barMaxWidth:20},
+      {name:'最终净收益',type:'bar',data:fin,itemStyle:{color:'#22d3ee'},barMaxWidth:20}
     ]
   },true);
   document.getElementById('path-title').textContent=
-    (session==='am'?'早盘':'午盘')+`Top5 盈亏路径 D+${distH}：价格浮盈 / 净收益 / 最大跌幅`;
+    (session==='am'?'早盘':'午盘')+`Top5 盈亏路径 D+${distH}：最大浮盈 / 最大浮亏 / 最终净收益`;
 }
 
 /* entry-to-close P&L (confirmed fills only) */
