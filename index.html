@@ -926,8 +926,8 @@ function cohortPickLabel(cohort,model,node){
   const confirm=DATA.selection_pipeline?.dates?.[cohort.date]?.[model.key]?.confirm;
   if(!confirm)return `历史原始 ${node.picks}股`;
   const count=confirm.pool?.length||0;
-  if(confirm.selection_outcome==='empty'||confirm.status==='abstain')return '空仓 · 0/10';
-  if(confirm.selection_outcome==='partial'||count<10)return `少选 · ${count}/10`;
+  if(confirm.selection_outcome==='empty'||confirm.status==='abstain')return '空仓 · 无符合要求股票';
+  if(confirm.selection_outcome==='partial'||count<10)return `少选 · ${count}/10 · 无多余符合要求股票`;
   return '满选 · 10/10';
 }
 function renderCohorts(){
@@ -973,12 +973,14 @@ function renderConsensus(){
   const frozen=DATA.selection_pipeline?.consensus?.[key];
   if(!rows){
     wrap.innerHTML=`<div class="consensus-card"><div class="consensus-head"><h3>模型共识榜 · ${session==='am'?'早盘':'午盘'} · ${co.date}</h3></div>
-      <div class="consensus-empty">${frozen?'十二策略均无达标股票，共识已冻结为空':'本批次在场策略不足 2 个，暂无共识结果'}</div></div>`;
+      <div class="consensus-empty">${frozen?'没有股票达到最低共识票数，保留全部空位':'系统数据缺失或共识尚未冻结'}</div></div>`;
     return;
   }
   const presentN=frozen?.strategy_count||Object.keys(co.models||{}).filter(k=>!['ensemble','hot100'].includes(k)&&co.models[k].picks>0).length;
   const slots=rows.filter(r=>0<r.rank&&r.rank<=5).sort((a,b)=>a.rank-b.rank);
   const references=rows.filter(r=>5<r.rank&&r.rank<=7).sort((a,b)=>a.rank-b.rank);
+  const shortage=rows.length<7
+    ?`仅有${rows.length}只达到共识门槛，无多余符合要求的股票，剩余位置留空。`:'';
   const card=(r,tag,isReference)=>{
     const votes=r.votes||0;
     const pctN=presentN?Math.round(votes/presentN*100):0;
@@ -1006,6 +1008,7 @@ function renderConsensus(){
       <span class="plan-badge">${presentN} 个模型在场</span>
     </div>
     <div class="consensus-desc">十二策略各自最多用10只确认股投票；共识只显示Top5主名单和2支替补。共识强度=获票策略占比，各策略与共识收益均只统计Top5。</div>
+    ${shortage?`<div class="consensus-filter">${esc(shortage)}</div>`:''}
     <div class="consensus-desc">点击卡片查看简洁分时图、现价与涨跌幅；行情日期以弹窗标注为准。</div>
     <div class="consensus-grid">${slots.map(r=>card(r,'Top'+r.rank,false)).join('')}</div>
     ${references.length?`<div class="consensus-alts"><h4>共识替补 · 2支（不计收益）</h4><div class="consensus-grid">${references.map((r,i)=>card(r,'替'+(i+1),true)).join('')}</div></div>`:''}
@@ -1404,8 +1407,8 @@ function renderPipeline(){
     }
     const count=node.pool?.length||0;
     if(stage==='confirm'){
-      if(node.selection_outcome==='empty'||node.status==='abstain')return '空仓 · 0/10';
-      if(node.selection_outcome==='partial'||count<10)return `少选 · ${count}/10`;
+      if(node.selection_outcome==='empty'||node.status==='abstain')return '空仓 · 无符合要求股票';
+      if(node.selection_outcome==='partial'||count<10)return `少选 · ${count}/10 · 无多余符合要求股票`;
       return '满选 · 10/10';
     }
     if(node.status==='abstain')return '空仓 · 策略无达标股票';
