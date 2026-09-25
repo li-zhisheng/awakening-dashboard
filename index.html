@@ -1191,6 +1191,8 @@ function renderPlan(){
   const exits=p.exits.map(e=>
     `<div class="ex-row"><span class="ex-date">${e.date} ${e.time}</span><span>${esc(e.action)}</span></div>`).join('');
   const risks=p.risk_rules.map(r=>`<li>${esc(r)}</li>`).join('');
+  const blackout=(p.earnings_blackout||[]).map(b=>
+    `<span class="alt-chip"><b>禁</b> ${esc(b.code)} ${esc(b.reason)}</span>`).join('');
   wrap.innerHTML=`
   <section class="operation-block">
     <div class="plan-head">
@@ -1201,6 +1203,7 @@ function renderPlan(){
       <span class="plan-badge">${esc(p.capital_rule)}</span>
     </div>
     <div class="regime-hint ${rcls}">${esc(rhint)}</div>
+    ${blackout?`<div class="plan-sub"><h4>财报回避 · 当日禁买（前一日收盘前必须清仓）</h4><div class="alt-chips">${blackout}</div></div>`:''}
     <div class="plan-grid">${orders}</div>
     ${p.alternates.length?`<div class="plan-sub"><h4>替补递补</h4><div class="alt-chips">${alts}</div></div>`:''}
     <div class="plan-cols">
