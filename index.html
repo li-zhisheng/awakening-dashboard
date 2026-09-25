@@ -1193,6 +1193,8 @@ function renderPlan(){
   const risks=p.risk_rules.map(r=>`<li>${esc(r)}</li>`).join('');
   const blackout=(p.earnings_blackout||[]).map(b=>
     `<span class="alt-chip"><b>禁</b> ${esc(b.code)} ${esc(b.reason)}</span>`).join('');
+  const complianceNotice=p.compliance_status==='blocked'
+    ?`<div class="notice" style="display:block">财报日历未就绪，所有买入已阻断：${esc(p.compliance_error||'数据缺失')}</div>`:'';
   wrap.innerHTML=`
   <section class="operation-block">
     <div class="plan-head">
@@ -1202,6 +1204,7 @@ function renderPlan(){
       <span class="plan-badge ${rcls}">市场环境：${esc(rlabel)}</span>
       <span class="plan-badge">${esc(p.capital_rule)}</span>
     </div>
+    ${complianceNotice}
     <div class="regime-hint ${rcls}">${esc(rhint)}</div>
     ${blackout?`<div class="plan-sub"><h4>财报回避 · 当日禁买（前一日收盘前必须清仓）</h4><div class="alt-chips">${blackout}</div></div>`:''}
     <div class="plan-grid">${orders}</div>
@@ -1409,7 +1412,7 @@ function renderPipeline(){
     return `${state[node.status]||node.status} · ${count}只`;
   };
   wrap.innerHTML=`<section class="operation-block"><h3>三层选股 · ${esc(day||'待准备')}</h3>
-    <p class="overlap-meta">18:30 盘后全量技术筛选 → 07:00 起关注度与事件过滤 → 09:25–09:30 竞价确认。所有时间均为北京时间。</p>
+    <p class="overlap-meta">18:30 盘后全量技术筛选 → 06:45 财报与环境预检 → 07:10 起关注度与事件过滤 → 09:25–09:30 竞价确认。所有时间均为北京时间。</p>
     ${day?`<div class="table-wrap"><table><thead><tr><th>模型</th>${stages.map(([,label])=>`<th>${label}</th>`).join('')}</tr></thead><tbody>
     ${Object.entries(models).map(([name,nodes])=>`<tr><td>${esc(modelDisplayName(name))}</td>${stages.map(([stage])=>{
       const n=nodes[stage];return `<td>${esc(stageState(name,stage,n))}${n?`<br><small>${esc(String(n.frozen_at||'').replace('T',' ').slice(0,19))}</small>`:''}</td>`;
@@ -1419,7 +1422,7 @@ function renderPipeline(){
       const current=n.confirm||n.watch;
       return `<details><summary>${esc(modelDisplayName(name))} · ${n.confirm?'竞价确认':'早盘观察'} ${current.pool.length}只</summary><p>${current.pool.map(s=>`${esc(s.code)} ${esc(s.name)}`).join(' · ')||'无达标股票'}</p></details>`;
     }).join('')}
-    ${consensus?`<p class="overlap-meta">十二策略共识已冻结 · Top5主名单 + ${consensus.alternate_limit}支替补 · 每策略最多Top${consensus.vote_limit_per_strategy}投票<br><small>${esc(String(consensus.frozen_at||'').replace('T',' ').slice(0,19))}</small></p>`:''}
+    ${consensus?`<p class="overlap-meta">十二策略共识已冻结 · Top5主名单 + ${consensus.alternate_limit}支替补 · 主名单至少${consensus.primary_min_votes||3}票、替补至少${consensus.alternate_min_votes||2}票 · 每策略最多Top${consensus.vote_limit_per_strategy}投票<br><small>${esc(String(consensus.frozen_at||'').replace('T',' ').slice(0,19))}</small></p>`:''}
     <p class="overlap-meta">${esc(p.execution)}。确认后仍需09:30后的买点及持仓核验。</p></section>`;
 }
 function renderAll(){
