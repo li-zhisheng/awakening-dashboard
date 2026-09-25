@@ -9,19 +9,19 @@
     return ['year','month','day'].map(k=>parts.find(p=>p.type===k).value).join('');
   }
   function freshness(data,session,now=new Date()){
-    const keys=[...new Set([...Object.keys(data.holdings||{}),...Object.keys(data.selection||{})])]
+    const keys=Object.keys(data.holdings||{})
       .filter(k=>/^\d{8}(pm)?$/.test(k)&&sessionOf(k)===session).sort();
     const key=keys[keys.length-1]||'', today=beijingDay(now);
     const state=!key?'missing':date8(key)===today?'today':date8(key)<today?'historical':'future';
     return {key,today,state};
   }
   function latestSession(data){
-    const keys=[...Object.keys(data.holdings||{}),...Object.keys(data.selection||{})]
+    const keys=Object.keys(data.holdings||{})
       .filter(k=>/^\d{8}(pm)?$/.test(k)).sort();
     return keys.length?sessionOf(keys[keys.length-1]):'am';
   }
   function batches(data){
-    return [...new Set([...Object.keys(data.holdings||{}),...Object.keys(data.selection||{})])]
+    return Object.keys(data.holdings||{})
       .filter(k=>/^\d{8}(pm)?$/.test(k)).sort().reverse();
   }
   function batchLabel(key){
@@ -34,37 +34,33 @@
     const slots=model.slots||0;
     return {available:true,filled,blocked,unknown:Math.max(0,slots-filled-blocked),vacant:Math.max(0,5-slots)};
   }
-  function stockIndex(data,cohort){
+  function stockIndex(data,cohort,rankLimit=10){
     const stocks=new Map();
     const names=new Map((data.models||[]).map(m=>[m.key,m.name]));
-    names.set('quality','质量精选');names.set('ensemble','模型共识');names.set('hot100','热榜基准');
+    names.set('quality','质量精选');names.set('ensemble','模型共识');names.set('system','热榜');
     for(const [model,rows] of Object.entries(data.holdings?.[cohort]||{})){
+      if(model==='hot100')continue;
       for(const row of rows){
+        const rank=Number(row.rank)||0;
+        if(rankLimit>0&&!(rank>0&&rank<=rankLimit))continue;
         const code=String(row.code||'');
         if(!/^\d{6}$/.test(code))continue;
-        if(!stocks.has(code))stocks.set(code,{code,name:row.name||code,sources:[],focusRank:null,qualityScore:null,sector:''});
+        if(!stocks.has(code))stocks.set(code,{code,name:row.name||code,sources:[]});
         const stock=stocks.get(code);
         if(stock.sources.some(s=>s.key===model))continue;
         stock.sources.push({key:model,name:names.get(model)||model,rank:row.rank,
           slot:row.slot||0,fill:row.fill||'pending'});
-        if(model==='quality'){
-          stock.focusRank=row.selection?.focus_rank||null;
-          stock.qualityScore=row.pick_score??null;
-          stock.sector=row.selection?.sector||'';
-        }
       }
     }
     return [...stocks.values()].sort((a,b)=>{
-      if(!!a.focusRank!==!!b.focusRank)return a.focusRank?-1:1;
-      if(a.focusRank&&b.focusRank)return a.focusRank-b.focusRank;
-      const count=s=>s.sources.filter(x=>!['ensemble','quality','hot100'].includes(x.key)).length;
+      const count=s=>s.sources.filter(x=>x.key!=='ensemble').length;
       return count(b)-count(a)||a.code.localeCompare(b.code);
     });
   }
   function filterStocks(stocks,query='',source='all'){
     const q=query.trim().toLocaleLowerCase();
     return stocks.filter(s=>(!q||s.code.includes(q)||s.name.toLocaleLowerCase().includes(q))
-      &&(source==='all'||(source==='focus'?!!s.focusRank:s.sources.some(x=>x.key===source))));
+      &&(source==='all'||s.sources.some(x=>x.key===source)));
   }
   function csvCell(value){
     let s=String(value??'');
@@ -73,8 +69,8 @@
     return '"'+s.replace(/"/g,'""')+'"';
   }
   function stocksCSV(stocks,cohort){
-    const rows=[['批次','代码（文本）','名称','重点名次','质量规则分','行业','推荐来源及原始名次']];
-    for(const s of stocks)rows.push([cohort,"'"+s.code,s.name,s.focusRank,s.qualityScore,s.sector,
+    const rows=[['批次','代码（文本）','名称','推荐来源及原始名次']];
+    for(const s of stocks)rows.push([cohort,"'"+s.code,s.name,
       s.sources.map(x=>`${x.name} #${x.rank}`).join('；')]);
     return '\ufeff'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
   }
@@ -90,30 +86,34 @@
     if(!row.verified?.[b]?.[horizon])return {status:'uncorrected'};
     return {status:'ready',value:path[0]-cost,mfe:path[1],mae:path[2]};
   }
-  // 真实收益主表：各实体Top5槽位，只按确认成交计算。
-  // 等权5槽资金：filled→真实收益；ran/one_line/open_locked→现金0(没买到)；
-  // 未核验/未到日不猜值，分别计 unknown/pending；总值按5槽资金口径=Σ/5。
+  // 午盘：原始Top5一律按11:30冻结价比较，不以涨跌或限价单成交状态筛选。
+  // 早盘：保留原有可成交槽位诊断。所有口径均非券商成交回报。
   function realReturns(data,cohort,cost=0){
     const holdings=data.holdings?.[cohort]||{};
-    const order=[...(data.models||[]).filter(m=>!m.virtual).map(m=>m.key)];
+    const fixed=sessionOf(cohort)==='pm';
+    const order=[...(data.models||[]).filter(m=>!m.virtual&&m.key!=='hot100').map(m=>m.key)];
     if(!order.includes('quality')&&Array.isArray(holdings.quality))order.push('quality');
     const names=new Map((data.models||[]).map(m=>[m.key,m.name]));
-    names.set('quality','质量精选 · 独立策略');
+    names.set('quality','质量精选');
+    names.set('system','热榜');
     const colors=new Map((data.models||[]).map(m=>[m.key,m.color]));
     const cols=['oc','d1','d3','d5'];
     return order.map(key=>{
       const rows=holdings[key]||[];
       const bySlot={};
-      rows.forEach(r=>{if(0<r.slot&&r.slot<=5&&!(r.slot in bySlot))bySlot[r.slot]=r;});
+      rows.forEach(r=>{
+        const pos=fixed?r.rank:r.slot;
+        if(0<pos&&pos<=5&&!(pos in bySlot))bySlot[pos]=r;
+      });
       const slots=[];
       for(let s=1;s<=5;s++){
         const r=bySlot[s];
         if(!r){slots.push({slot:s,name:'—',oc:'pending',d1:'pending',d3:'pending',d5:'pending'});continue;}
         const c={slot:s,name:r.name||r.code,code:r.code};
         const isCash=['ran','one_line','open_locked'].includes(r.fill);
-        c.oc=r.fill==='filled'?(r.oc??'unknown'):isCash?0:'unknown';
+        c.oc=fixed?(r.oc??'pending'):r.fill==='filled'?(r.oc??'unknown'):isCash?0:'unknown';
         for(const h of [1,3,5]){
-          const z=holdingReturn(r,'executed',String(h),cost);
+          const z=holdingReturn(r,fixed?'open':'executed',String(h),cost);
           c['d'+h]=z.status==='ready'?z.value:z.status==='cash'?0
             :z.status==='pending'?'pending':'unknown';
         }
@@ -124,9 +124,11 @@
         let sum=0,unknown=0,pending=0;
         slots.forEach(c=>{const v=c[col];
           if(v==='pending')pending++;else if(v==='unknown')unknown++;else sum+=v;});
-        metrics[col]={value:+(sum/5*100).toFixed(2),unknown,pending};
+        metrics[col]={value:fixed&&(unknown||pending)?null:+(sum/5*100).toFixed(2),unknown,pending};
       }
       return {key,name:names.get(key)||key,color:colors.get(key)||'',
+        basis:fixed?'frozen_1130':'execution_estimate',
+        priced:slots.filter(c=>Number.isFinite(bySlot[c.slot]?.entry?.[1])&&bySlot[c.slot].entry[1]>0).length,
         filled:slots.filter(c=>bySlot[c.slot]?.fill==='filled').length,
         cash:slots.filter(c=>['ran','one_line','open_locked'].includes(bySlot[c.slot]?.fill)).length,
         slots,metrics};
