@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Awakening 历史回测</title>
+  <script src="echarts.min.js"></script>
+  <style>
+    :root{
+      color-scheme:dark;--bg:#101417;--panel:#171d21;--line:#2d373d;
+      --text:#edf2f4;--muted:#93a2aa;--cyan:#49c6c8;--green:#45c486;
+      --red:#ef6a6a;--amber:#e7b84b;--blue:#6ea8fe;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0}
+    button,input,select{font:inherit}
+    header{border-bottom:1px solid var(--line);background:#12181b}
+    .top{max-width:1440px;margin:auto;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+    h1{font-size:24px;margin:0;font-weight:680}
+    .sub{color:var(--muted);margin-top:3px}
+    .env{display:flex;align-items:center;gap:8px;color:#101417;background:var(--amber);padding:5px 9px;border-radius:4px;font-weight:700;white-space:nowrap}
+    .env i{width:8px;height:8px;border-radius:50%;background:#101417}
+    .toolbar{border-bottom:1px solid var(--line);background:#141a1e}
+    .toolbar-inner{max-width:1440px;margin:auto;padding:12px 24px;display:flex;align-items:end;gap:12px;flex-wrap:wrap}
+    label{display:grid;gap:5px;color:var(--muted);font-size:12px}
+    input,select{height:36px;color:var(--text);background:#0f1417;border:1px solid #39464d;border-radius:4px;padding:0 10px;min-width:145px}
+    button{height:36px;border:1px solid #4d626c;border-radius:4px;padding:0 14px;color:var(--text);background:#243139;cursor:pointer}
+    button.primary{background:var(--cyan);border-color:var(--cyan);color:#071415;font-weight:700}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    main{max-width:1440px;margin:auto;padding:20px 24px 40px}
+    .status{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0 18px;border-bottom:1px solid var(--line)}
+    .status strong{font-size:16px}.muted{color:var(--muted)}
+    .error{color:#ff9b9b}.ok{color:var(--green)}.warn{color:var(--amber)}
+    .metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:18px 0}
+    .metric{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px}
+    .metric span{display:block;color:var(--muted);font-size:12px}
+    .metric b{display:block;font-size:24px;margin-top:5px;font-variant-numeric:tabular-nums}
+    .returns-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
+    .returns-grid .metric b{font-size:21px}
+    .tabs{display:flex;gap:4px;margin:18px 0 10px}
+    .tabs button{border-color:transparent;background:transparent;color:var(--muted)}
+    .tabs button.active{color:var(--text);background:#253137;border-color:#3b4a51}
+    .section{border-top:1px solid var(--line);padding-top:16px;margin-top:18px}
+    .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+    h2{font-size:16px;margin:0}.legend{font-size:12px;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:minmax(520px,1.4fr) minmax(360px,1fr);gap:16px}
+    .pane{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+    .chart{height:330px}
+    .table-wrap{overflow:auto;max-height:520px}
+    table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+    th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+    th{position:sticky;top:0;background:#1b2328;color:var(--muted);font-size:12px;z-index:1}
+    th:first-child,td:first-child{text-align:left}
+    tr[data-model]{cursor:pointer}tr[data-model]:hover{background:#20292e}
+    tr.selected{background:#243139}
+    .pos{color:var(--red)}.neg{color:var(--green)}
+    .month-table th:first-child,.month-table td:first-child{position:sticky;left:0;background:#1b2328;z-index:2}
+    .month-table td{min-width:88px}.money{color:var(--muted);font-size:11px}
+    .pill{display:inline-block;border:1px solid #435158;border-radius:4px;padding:2px 6px;font-size:12px}
+    .hash{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
+    .empty{padding:56px 24px;text-align:center;color:var(--muted)}
+    .warnings{display:grid;gap:6px;padding:12px 0;color:var(--amber)}
+    @media(max-width:900px){
+      .top,.toolbar-inner,main{padding-left:14px;padding-right:14px}
+      .top{align-items:flex-start}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .returns-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+      .grid{grid-template-columns:1fr}.chart{height:280px}
+      input,select{min-width:130px}.status{align-items:flex-start;flex-direction:column}
+    }
+    @media(max-width:480px){
+      h1{font-size:20px}.metrics{grid-template-columns:1fr 1fr}
+      .returns-grid{grid-template-columns:1fr 1fr}
+      .metric b{font-size:20px}.toolbar-inner>*{flex:1 1 130px}
+      button{width:100%}
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <div><h1>Awakening 历史回测</h1><div class="sub" id="subtitle">等待研究数据</div></div>
+    <div class="env"><i></i>研究环境</div>
+  </div>
+</header>
+<div class="toolbar">
+  <div class="toolbar-inner">
+    <label>开始日期<input id="start" type="date"></label>
+    <label>结束日期<input id="end" type="date"></label>
+    <label>观察周期<select id="horizon"><option value="1">D+1</option><option value="3">D+3</option><option value="5">D+5</option></select></label>
+    <label>卖出价格<select id="exit-mode"><option value="close">收盘价</option><option value="open">开盘价</option></select></label>
+    <label>策略<select id="model"></select></label>
+    <label>收益月份<select id="month"></select></label>
+    <button class="primary" id="run">运行回测</button>
+    <button id="refresh">刷新结果</button>
+  </div>
+</div>
+<main>
+  <div class="status">
+    <div><strong id="state">正在读取</strong><div class="muted" id="source"></div></div>
+    <div class="muted"><span id="generated"></span><br>买入：选股目标日开盘价；卖出：D+1/D+3/D+5开盘价或收盘价</div>
+  </div>
+  <div class="metrics">
+    <div class="metric"><span>请求交易日</span><b id="m-days">0</b></div>
+    <div class="metric"><span>技术层完整</span><b id="m-tech">0</b></div>
+    <div class="metric"><span>三层完整</span><b id="m-full">0</b></div>
+    <div class="metric"><span>模拟本金</span><b id="m-capital">—</b></div>
+    <div class="metric"><span>往返成本</span><b id="m-cost">15 bp</b></div>
+  </div>
+  <div class="tabs">
+    <button data-layer="technical" class="active">技术层</button>
+    <button data-layer="confirmed">三层确认</button>
+  </div>
+  <section class="section">
+    <div class="section-head"><h2>所选月份六口径收益</h2><div class="legend">Top5等权；少选或开盘未成交部分留现金</div></div>
+    <div class="metrics returns-grid" id="month-summary"></div>
+  </section>
+  <div class="section-head"><h2>月度已实现收益</h2><div class="legend">D+N 使用 (N+1)×5 个逐股资金槽，延期持仓持续占资</div></div>
+  <section class="grid">
+    <div class="pane"><div id="chart" class="chart"></div></div>
+    <div class="pane table-wrap"><table>
+      <thead><tr><th>策略</th><th>交易日</th><th>成交率</th><th>累计净收益</th><th>沪深300同频超额</th><th>累计盈亏</th><th>锁定本金</th><th>未结算</th><th>数据异常</th><th>胜率</th><th>最大浮盈</th><th>最大浮亏</th></tr></thead>
+      <tbody id="model-rows"></tbody>
+    </table></div>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2>策略月度收益矩阵</h2><div class="legend">红色盈利，绿色亏损；金额为当月实际模拟盈亏</div></div>
+    <div class="pane table-wrap"><table class="month-table">
+      <thead id="month-head"></thead><tbody id="month-rows"></tbody>
+    </table></div>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2>所选策略月度明细</h2><div class="legend">收益仅在实际卖出月确认；单元格同步显示锁资、未结算、异常和成交率</div></div>
+    <div class="pane table-wrap"><table>
+      <thead><tr><th>收益月份</th><th>D+1开盘</th><th>D+1收盘</th><th>D+3开盘</th><th>D+3收盘</th><th>D+5开盘</th><th>D+5收盘</th></tr></thead>
+      <tbody id="monthly-detail"></tbody>
+    </table></div>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2>固定Top5审计</h2><div class="legend hash" id="coverage-label"></div></div>
+    <div class="pane table-wrap"><table>
+      <thead><tr><th>买入日</th><th>信号日</th><th>固定Top5</th><th>候选数</th><th>Top5哈希</th><th>成交</th><th>状态</th></tr></thead>
+      <tbody id="run-rows"></tbody>
+    </table></div>
+  </section>
+  <div class="warnings" id="warnings"></div>
+</main>
+<script>
+let DATA=null,LAYER='technical',MODEL='',MONTH='',CHART=null;
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pct=v=>v==null?'—':`${v>=0?'+':''}${(v*100).toFixed(2)}%`;
+const cls=v=>v==null?'':v>=0?'pos':'neg';
+const money=v=>v==null?'—':`${v>=0?'+':''}¥${Math.abs(v).toLocaleString('zh-CN',{maximumFractionDigits:0})}`;
+const dateInput=v=>v&&v.length===8?`${v.slice(0,4)}-${v.slice(4,6)}-${v.slice(6)}`:'';
+const compactDate=v=>(v||'').replaceAll('-','');
+const shortHash=v=>v?String(v).slice(0,10):'未冻结';
+const names={quality:'质量精选',zhipu:'智谱',xinghuo:'星火',deepseek:'DeepSeek',doubao:'豆包',hunyuan:'混元',kimi:'KIMI',wenxin:'文心',yuanbao:'元宝',qianwen:'千问',chatgpt:'ChatGPT',system:'热榜策略',ensemble:'共识'};
+const variants=[['1','open','D+1开盘'],['1','close','D+1收盘'],['3','open','D+3开盘'],['3','close','D+3收盘'],['5','open','D+5开盘'],['5','close','D+5收盘']];
+function variantKey(node,h,mode){
+  const preferred=`${h}_${mode}`;
+  if(node?.summary?.[preferred])return preferred;
+  return mode==='close'&&node?.summary?.[h]?h:preferred;
+}
+function monthRows(node,h,mode){
+  return node?.monthly?.[variantKey(node,h,mode)]||[];
+}
+function availableMonths(node){
+  const values=variants.flatMap(([h,mode])=>monthRows(node,h,mode).map(x=>x.month));
+  return [...new Set(values)].sort();
+}
+function render(){
+  const coverage=DATA.coverage||{},source=DATA.source||{};
+  $('subtitle').textContent=`策略 ${DATA.strategy_version||'—'} · ${DATA.range?.from||'—'} 至 ${DATA.range?.through||'—'}`;
+  if(!$('start').value)$('start').value=dateInput(DATA.range?.from);
+  if(!$('end').value)$('end').value=dateInput(DATA.range?.through);
+  const manifest=shortHash(DATA.selection_manifest_hash);
+  $('source').textContent=source.name?`数据源：${source.name} · 运行 ${shortHash(DATA.run_id)} · Top5清单 ${manifest}`:'未加载历史数据包';
+  $('generated').textContent=DATA.generated_at?`生成 ${new Date(DATA.generated_at).toLocaleString('zh-CN',{hour12:false})}`:'';
+  $('m-days').textContent=coverage.requested_days||0;
+  $('m-tech').textContent=coverage.technical_complete_days||0;
+  $('m-full').textContent=coverage.full_three_stage_days||0;
+  $('m-capital').textContent=DATA.initial_capital?`¥${(+DATA.initial_capital).toLocaleString('zh-CN',{maximumFractionDigits:0})}`:'—';
+  $('m-cost').textContent=`${DATA.cost_bps??15} bp`;
+  const hasRuns=(DATA.runs||[]).length>0;
+  $('state').textContent=hasRuns?'结果已加载':'历史数据待接入';
+  $('state').className=hasRuns?'ok':'warn';
+  const models=Object.keys(DATA.results?.[LAYER]||{});
+  if(!models.includes(MODEL))MODEL=models[0]||'';
+  $('model').innerHTML=models.map(m=>`<option value="${esc(m)}" ${m===MODEL?'selected':''}>${esc(names[m]||m)}</option>`).join('');
+  const node=DATA.results?.[LAYER]?.[MODEL];
+  const months=availableMonths(node);
+  if(!months.includes(MONTH))MONTH=months.at(-1)||'';
+  $('month').innerHTML=months.map(m=>`<option value="${m}" ${m===MONTH?'selected':''}>${m.slice(0,4)}-${m.slice(4)}</option>`).join('');
+  renderMonthSummary(node);renderModels(models);renderMonthlyMatrix(models);
+  renderMonthlyDetail(node);renderRuns();renderChart();
+  $('warnings').innerHTML=(DATA.warnings||[]).map(w=>`<div>· ${esc(w)}</div>`).join('');
+  $('run').disabled=!DATA.can_run;
+}
+function renderMonthSummary(node){
+  $('month-summary').innerHTML=variants.map(([h,mode,label])=>{
+    const row=monthRows(node,h,mode).find(x=>x.month===MONTH);
+    const fill=row?.fill_rate==null?'—':`${(row.fill_rate*100).toFixed(1)}%`;
+    return `<div class="metric"><span>${label}</span><b class="${cls(row?.return)}">${pct(row?.return)}</b><div class="money">${money(row?.profit_cny)} · 成交 ${fill}</div><div class="money">锁定 ¥${Number(row?.locked_capital_end||0).toLocaleString('zh-CN',{maximumFractionDigits:0})} · 未结 ${row?.unsettled_positions_end??0} · 异常 ${row?.data_error_count??0}</div></div>`;
+  }).join('');
+}
+function renderModels(models){
+  const h=$('horizon').value,mode=$('exit-mode').value,tbody=$('model-rows');
+  if(!models.length){tbody.innerHTML='<tr><td colspan="12" class="empty">当前层没有可验证结果</td></tr>';return}
+  tbody.innerHTML=models.map(m=>{
+    const node=DATA.results[LAYER][m],key=variantKey(node,h,mode),s=node.summary[key]||{},months=node.monthly?.[key]||[];
+    const selected=s.selected_stocks??(node.days||[]).reduce((sum,x)=>sum+(x.selected||0),0);
+    const priced=s.priced_stocks??(node.days||[]).reduce((sum,x)=>sum+(x.priced||0),0);
+    const fill=s.fill_rate!=null?`${(s.fill_rate*100).toFixed(1)}%`:selected?`${(priced/selected*100).toFixed(1)}%`:'—';
+    const mfe=months.reduce((v,x)=>x.max_floating_profit==null?v:Math.max(v??-Infinity,x.max_floating_profit),null);
+    const mae=months.reduce((v,x)=>x.max_floating_loss==null?v:Math.min(v??Infinity,x.max_floating_loss),null);
+    return `<tr data-model="${esc(m)}" class="${m===MODEL?'selected':''}"><td>${esc(names[m]||m)}</td><td>${s.trade_days??s.n??0}</td><td>${fill}</td><td class="${cls(s.total_return)}">${pct(s.total_return)}</td><td class="${cls(s.excess_return)}">${pct(s.excess_return)}</td><td class="${cls(s.profit_cny)}">${money(s.profit_cny)}</td><td>¥${Number(s.locked_capital||0).toLocaleString('zh-CN',{maximumFractionDigits:0})}</td><td class="${s.unsettled_positions?'warn':''}">${s.unsettled_positions??0}</td><td class="${s.data_error_count?'error':''}">${s.data_error_count??0}</td><td>${s.win_rate==null?'—':(s.win_rate*100).toFixed(1)+'%'}</td><td class="${cls(mfe)}">${pct(mfe)}</td><td class="${cls(mae)}">${pct(mae)}</td></tr>`;
+  }).join('');
+  tbody.querySelectorAll('tr[data-model]').forEach(row=>row.onclick=()=>{MODEL=row.dataset.model;$('model').value=MODEL;render()});
+}
+function renderMonthlyMatrix(models){
+  const h=$('horizon').value,mode=$('exit-mode').value;
+  const months=[...new Set(models.flatMap(m=>monthRows(DATA.results[LAYER][m],h,mode).map(x=>x.month)))].sort();
+  $('month-head').innerHTML=months.length?`<tr><th>策略</th>${months.map(m=>`<th>${esc(m.slice(0,4)+'-'+m.slice(4))}</th>`).join('')}</tr>`:'';
+  if(!months.length){$('month-rows').innerHTML='<tr><td class="empty">当前层没有月度账户结果</td></tr>';return}
+  $('month-rows').innerHTML=models.map(model=>{
+    const lookup=Object.fromEntries(monthRows(DATA.results[LAYER][model],h,mode).map(x=>[x.month,x]));
+    const cells=months.map(month=>{
+      const row=lookup[month];if(!row)return '<td>—</td>';
+      const value=row.return,alpha=Math.min(.24,.05+Math.abs(value)*1.8);
+      const bg=value>=0?`rgba(239,106,106,${alpha})`:`rgba(69,196,134,${alpha})`;
+      return `<td style="background:${bg}"><span class="${cls(value)}">${pct(value)}</span><div class="money">${money(row.profit_cny)} · 同频超额 ${pct(row.excess_return)}</div></td>`;
+    }).join('');
+    return `<tr data-model="${esc(model)}"><td>${esc(names[model]||model)}</td>${cells}</tr>`;
+  }).join('');
+}
+function renderMonthlyDetail(node){
+  const months=availableMonths(node);
+  if(!months.length){$('monthly-detail').innerHTML='<tr><td colspan="7" class="empty">当前策略没有月度结果</td></tr>';return}
+  $('monthly-detail').innerHTML=months.map(month=>{
+    const cells=variants.map(([h,mode])=>{
+      const row=monthRows(node,h,mode).find(x=>x.month===month);
+      const fill=row?.fill_rate==null?'—':`${(row.fill_rate*100).toFixed(1)}%`;
+      return `<td class="${cls(row?.return)}">${pct(row?.return)}<div class="money">${money(row?.profit_cny)} · 成交 ${fill}</div><div class="money">锁 ¥${Number(row?.locked_capital_end||0).toLocaleString('zh-CN',{maximumFractionDigits:0})} · 未结 ${row?.unsettled_positions_end??0} · 异常 ${row?.data_error_count??0}</div></td>`;
+    }).join('');
+    return `<tr><td>${month.slice(0,4)}-${month.slice(4)}</td>${cells}</tr>`;
+  }).join('');
+}
+function renderRuns(){
+  const runs=DATA.runs||[],node=DATA.results?.[LAYER]?.[MODEL];
+  $('coverage-label').textContent=`契约 ${shortHash(DATA.selection_contract_hash)} · 清单 ${shortHash(DATA.selection_manifest_hash)}`;
+  $('run-rows').innerHTML=runs.length?runs.map(r=>{
+    const selection=r.selections?.[MODEL],top5=(selection?.top5||[]).map(x=>x.code).join('、')||'未冻结';
+    const errs=[r.technical_errors?.[MODEL],r.stage_errors?.[MODEL],r.stage_errors?.all].filter(Boolean);
+    const day=(node?.days||[]).find(x=>x.date===r.target_date);
+    const labels={complete:'完整',complete_with_cash:'含现金',delayed_exit:'延期已结算',unsettled:'持仓未结算',data_invalid:'数据异常'};
+    const state=errs[0]||labels[day?.status]||day?.status||'不可验证';
+    const abnormal=errs.length||['complete_with_cash','unsettled','data_invalid'].includes(day?.status);
+    return `<tr><td>${esc(r.target_date)}</td><td>${esc(r.signal_date||'—')}</td><td>${esc(top5)}</td><td>${selection?.candidate_count??r.technical_counts?.[MODEL]??'—'}</td><td class="hash">${esc(shortHash(selection?.top5_hash))}</td><td>${day?`${day.priced}/${day.selected}`:'—'}</td><td class="${abnormal?'warn':'ok'}">${esc(state)}</td></tr>`;
+  }).join(''):'<tr><td colspan="7" class="empty">尚无固定Top5清单</td></tr>';
+}
+function renderChart(){
+  if(!CHART)CHART=echarts.init($('chart'));
+  const h=$('horizon').value,mode=$('exit-mode').value,node=DATA.results?.[LAYER]?.[MODEL];
+  const key=variantKey(node,h,mode),months=node?.monthly?.[key]||[];
+  const values=months.map(d=>d.return==null?null:+(d.return*100).toFixed(3));
+  const exitLabel=mode==='open'?'开盘卖出':'收盘卖出';
+  CHART.setOption({
+    backgroundColor:'transparent',animation:false,
+    title:{text:`${names[MODEL]||MODEL||'策略'} · D+${h}${exitLabel}月度净收益`,left:14,top:12,textStyle:{color:'#edf2f4',fontSize:14,fontWeight:600}},
+    grid:{left:52,right:18,top:54,bottom:42},
+    tooltip:{trigger:'axis',formatter:params=>{const i=params[0]?.dataIndex,row=months[i];return row?`${row.month.slice(0,4)}-${row.month.slice(4)}<br>净收益 ${pct(row.return)}<br>盈亏 ${money(row.profit_cny)}<br>成交率 ${row.fill_rate==null?'—':(row.fill_rate*100).toFixed(1)+'%'}`:'不可验证'}},
+    xAxis:{type:'category',data:months.map(d=>d.month.slice(0,4)+'-'+d.month.slice(4)),axisLabel:{color:'#93a2aa'},axisLine:{lineStyle:{color:'#39464d'}}},
+    yAxis:{type:'value',axisLabel:{color:'#93a2aa',formatter:'{value}%'},splitLine:{lineStyle:{color:'#263138'}}},
+    series:[{type:'bar',data:values.map(v=>({value:v,itemStyle:{color:v==null?'#56636a':v>=0?'#ef6a6a':'#45c486'}})),barMaxWidth:28}]
+  },true);
+}
+async function load(){
+  const endpoint=location.pathname.includes('/backtest/')?'data.json':'/api/data';
+  try{const r=await fetch(endpoint,{cache:'no-store'});DATA=await r.json();render()}
+  catch(e){$('state').textContent='读取失败';$('state').className='error';$('source').textContent=String(e)}
+}
+async function run(){
+  $('run').disabled=true;$('state').textContent='回测运行中';$('state').className='warn';
+  try{
+    const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start:compactDate($('start').value),end:compactDate($('end').value)})});
+    const data=await r.json();if(!r.ok)throw new Error(data.error||`HTTP ${r.status}`);DATA=data;render();
+  }catch(e){$('state').textContent='回测失败';$('state').className='error';$('source').textContent=String(e)}
+  finally{$('run').disabled=!DATA?.can_run}
+}
+document.querySelectorAll('[data-layer]').forEach(b=>b.onclick=()=>{LAYER=b.dataset.layer;document.querySelectorAll('[data-layer]').forEach(x=>x.classList.toggle('active',x===b));render()});
+$('horizon').onchange=render;$('exit-mode').onchange=render;
+$('model').onchange=e=>{MODEL=e.target.value;MONTH='';render()};
+$('month').onchange=e=>{MONTH=e.target.value;renderMonthSummary(DATA.results?.[LAYER]?.[MODEL])};
+$('run').onclick=run;$('refresh').onclick=load;window.onresize=()=>CHART?.resize();load();
+</script>
+</body>
+</html>
