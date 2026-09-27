@@ -116,6 +116,9 @@
     color:var(--sub);cursor:pointer}
   .quote-tabs button:last-child,.selection-tabs button:last-child{border-right:0}
   .quote-tabs button.on,.selection-tabs button.on{background:#243555;color:var(--txt);font-weight:600}
+  .quote-indicator{display:inline-flex;align-items:center;gap:7px;margin:10px 0 0;
+    color:var(--sub);font-size:12px;cursor:pointer}
+  .quote-indicator input{width:16px;height:16px;accent-color:#67c9ff}
   .quote-chart{width:100%;height:390px;margin:12px 0}
   .quote-chart[hidden]{display:none}
   .quote-status{font-size:13px;color:#a9bad3;line-height:1.7;margin:12px 0}
@@ -505,7 +508,7 @@
 <dialog id="quote-dialog" class="quote-dialog" aria-labelledby="quote-title">
   <div class="quote-head">
     <div><h2 id="quote-title">分时行情</h2><p id="quote-code"></p></div>
-    <button type="button" id="quote-close" aria-label="关闭分时行情" autofocus>✕</button>
+    <button type="button" id="quote-close" aria-label="关闭股票行情" autofocus>✕</button>
   </div>
   <div id="quote-price" class="quote-price">—</div>
   <div id="quote-change" class="quote-change">—</div>
@@ -514,6 +517,9 @@
     <button type="button" id="quote-minute-tab" data-view="minute" class="on" role="tab" aria-selected="true">分时</button>
     <button type="button" id="quote-daily-tab" data-view="daily" role="tab" aria-selected="false">日K</button>
   </div>
+  <label class="quote-indicator" id="quote-trend-wrap" hidden>
+    <input type="checkbox" id="quote-trend" checked> 显示多空趋势代理
+  </label>
   <div id="quote-chart" class="quote-chart" role="img" aria-label="分时价格走势图" hidden></div>
   <p id="quote-status" class="quote-status" role="status" aria-live="polite">正在读取行情…</p>
   <div class="quote-footer">
@@ -817,7 +823,7 @@ function renderHoldings(){
   document.getElementById('hold-table').innerHTML=head+(rows.length?body:'<tbody><tr><td colspan="19" class="empty-row">当前模型在此场次暂无选股名单</td></tr></tbody>');
   document.querySelectorAll('#hold-table tr').forEach(tr=>{
     if(tr.children.length<19)return;
-    [3,4,5,6,8,10,11,13,14].forEach(i=>tr.children[i].hidden=!showOHLC);
+    [4,5,6,10,11,13,14].forEach(i=>tr.children[i].hidden=!showOHLC);
   });
 }
 
@@ -1087,6 +1093,28 @@ function parseDailyKline(payload,symbol){
     throw new Error('日K日期异常');
   return {bars,adjustment:Array.isArray(node.qfqday)?'前复权':'不复权'};
 }
+function dailyTrendStudy(bars){
+  const closes=bars.map(bar=>bar.close);
+  const average=period=>closes.map((_,index)=>{
+    if(index<period-1)return null;
+    return closes.slice(index-period+1,index+1).reduce((sum,value)=>sum+value,0)/period;
+  });
+  const averages={5:average(5),10:average(10),20:average(20),30:average(30)};
+  const marks=[];
+  let previous='neutral';
+  for(let index=0;index<bars.length;index++){
+    const m5=averages[5][index],m10=averages[10][index],m20=averages[20][index];
+    let state='neutral';
+    if(m5!=null&&m10!=null&&m20!=null&&closes[index]>m5&&m5>m10&&m10>m20)
+      state='long';
+    else if(m5!=null&&m10!=null&&closes[index]<m5&&m5<m10)
+      state='short';
+    if(state!=='neutral'&&state!==previous)
+      marks.push({index,state,price:state==='long'?bars[index].low:bars[index].high});
+    previous=state;
+  }
+  return {averages,marks};
+}
 function drawQuoteHeader(q){
   const positive=q.change>0, cls=positive?'up':q.change<0?'down':'';
   quoteEl('price').className='quote-price '+cls;
@@ -1152,12 +1180,26 @@ function drawMinuteQuote(q){
 }
 function drawDailyKline(data){
   const bars=data.bars,dates=bars.map(bar=>bar.date.slice(5));
+  const study=dailyTrendStudy(bars);
+  const showTrend=quoteState?.trend!==false;
+  const marks=showTrend?study.marks.map(mark=>({
+    name:mark.state==='long'?'多':'空',
+    coord:[mark.index,mark.price],
+    value:mark.state==='long'?'多':'空',
+    symbol:'circle',
+    symbolSize:25,
+    symbolOffset:[0,mark.state==='long'?'65%':'-65%'],
+    itemStyle:{color:mark.state==='long'?'#f65d6b':'#20b97a',borderColor:'#101827',borderWidth:2},
+    label:{show:true,color:'#fff',fontSize:12,fontWeight:700,formatter:mark.state==='long'?'多':'空'}
+  })):[];
   quoteEl('chart').hidden=false;
   if(!quoteChart)quoteChart=echarts.init(quoteEl('chart'));
   quoteChart.resize();
   quoteChart.setOption({
     animation:false,
     axisPointer:{link:[{xAxisIndex:'all'}]},
+    legend:{top:0,right:8,data:['MA5','MA10','MA20','MA30'],
+      textStyle:{color:'#8b9bb8',fontSize:10},itemWidth:14,itemHeight:7},
     tooltip:{...tip,trigger:'axis',confine:true,formatter:items=>{
       const i=items[0]?.dataIndex,bar=bars[i];
       if(!bar)return '暂无数据';
@@ -1184,14 +1226,22 @@ function drawDailyKline(data){
     ],
     series:[
       {name:'日K',type:'candlestick',data:bars.map(bar=>[bar.open,bar.close,bar.low,bar.high]),
-        itemStyle:{color:'#f66b78',color0:'#20c997',borderColor:'#f66b78',borderColor0:'#20c997'}},
+        itemStyle:{color:'#f66b78',color0:'#20c997',borderColor:'#f66b78',borderColor0:'#20c997'},
+        markPoint:{silent:true,data:marks}},
       {name:'成交量',type:'bar',xAxisIndex:1,yAxisIndex:1,
-        data:bars.map(bar=>({value:bar.volume,itemStyle:{color:bar.close>=bar.open?'rgba(246,107,120,.58)':'rgba(32,201,151,.58)'}}))}
+        data:bars.map(bar=>({value:bar.volume,itemStyle:{color:bar.close>=bar.open?'rgba(246,107,120,.58)':'rgba(32,201,151,.58)'}}))},
+      ...[[5,'#d9e2ef'],[10,'#e7b84b'],[20,'#d76b86'],[30,'#65b85a']].map(([period,color])=>({
+        name:'MA'+period,type:'line',data:study.averages[period],showSymbol:false,smooth:false,
+        connectNulls:false,lineStyle:{width:1.4,color},itemStyle:{color},xAxisIndex:0,yAxisIndex:0
+      }))
     ]
   },true);
   const first=bars[0],last=bars[bars.length-1];
+  const longCount=study.marks.filter(mark=>mark.state==='long').length;
+  const shortCount=study.marks.filter(mark=>mark.state==='short').length;
   quoteEl('chart').setAttribute('aria-label',`${first.date}至${last.date} ${data.adjustment}日K走势图`);
-  quoteEl('status').textContent=`${data.adjustment}日K · ${bars.length}个交易日 · 数据截至 ${last.date}`;
+  quoteEl('status').textContent=`${data.adjustment}日K · ${bars.length}个交易日 · 数据截至 ${last.date}`
+    +(showTrend?` · 趋势转折 多${longCount}/空${shortCount}`:'');
 }
 async function refreshQuote(force=false){
   const state=quoteState;
@@ -1261,9 +1311,10 @@ function setQuoteView(view){
     button.setAttribute('aria-selected',String(selected));
   }
   quoteEl('code').textContent=quoteState.code+' · '+(view==='minute'?'分时行情':'前复权日K');
+  quoteEl('trend-wrap').hidden=view!=='daily';
   quoteEl('note').innerHTML=view==='minute'
     ?'腾讯行情 · 可能延迟 · 每15秒刷新<br>虚线为昨收（0%）；高低点按分时采样，同价取首次，非逐笔极值。'
-    :'腾讯前复权日K · 按需读取近120个交易日<br>红涨绿跌；下方为成交量，可拖动缩放。';
+    :'腾讯前复权日K · 按需读取近120个交易日<br>多：收盘&gt;MA5&gt;MA10&gt;MA20；空：收盘&lt;MA5&lt;MA10，仅标记状态切换。该代理可审计，并非同花顺原公式。';
   quoteEl('refresh').disabled=false;
   if(view==='minute'){
     if(quoteState.minute)drawMinuteQuote(quoteState.minute);
@@ -1281,11 +1332,13 @@ function openQuote(code,name){
   quoteController?.abort();quoteController=null;
   dailyController?.abort();dailyController=null;
   clearInterval(quoteTimer);
-  quoteState={symbol,code,name:name||code,loaded:false,view:'minute',minute:null,daily:dailyCache.get(symbol)||null};
+  quoteState={symbol,code,name:name||code,loaded:false,view:'minute',minute:null,
+    daily:dailyCache.get(symbol)||null,trend:true};
   quoteEl('title').textContent=name||code;
   quoteEl('price').className='quote-price';quoteEl('price').textContent='—';
   quoteEl('change').className='quote-change';quoteEl('change').textContent='—';
   quoteEl('time').textContent='';
+  quoteEl('trend').checked=true;
   quoteEl('chart').hidden=true;quoteChart?.clear();
   if(!quoteDialog.open)quoteDialog.showModal();
   setQuoteView('minute');
@@ -1301,6 +1354,11 @@ quoteEl('refresh').onclick=()=>quoteState?.view==='daily'?refreshDaily(true):ref
 quoteEl('tabs').onclick=e=>{
   const button=e.target.closest('button[data-view]');
   if(button)setQuoteView(button.dataset.view);
+};
+quoteEl('trend').onchange=e=>{
+  if(!quoteState)return;
+  quoteState.trend=e.target.checked;
+  if(quoteState.view==='daily'&&quoteState.daily)drawDailyKline(quoteState.daily);
 };
 quoteDialog.addEventListener('click',e=>{
   if(e.target!==quoteDialog)return;
@@ -1455,7 +1513,7 @@ function renderFreshness(){
     ?`三层策略版本 ${DATA.selection_pipeline.version}`
     :'旧版历史原始名单，不代表当前三层策略效果';
   const coverage=['am','pm'].map(s=>`${s==='am'?'今日早盘':'今日午盘'}：${keys.includes(today+(s==='pm'?'pm':''))?'已有批次':'暂无批次'}`).join(' · ');
-  el.innerHTML=`<strong>${esc(titles[status.state])}</strong><small>${esc(versionNote)}。${coverage}。上方“当前批次”可直接选择全部日期，联动名单、查股、明细与成交状态。</small><small>北京时间日期 ${status.today} · 快照生成 ${esc(DATA.generated||'未知')} · ${loadError?'刷新失败，保留旧快照':'自动刷新只检查发布更新，分时行情在弹窗单独读取'}</small>`;
+  el.innerHTML=`<strong>${esc(titles[status.state])}</strong><small>${esc(versionNote)}。${coverage}。上方“当前批次”可直接选择全部日期，联动名单、查股、明细与成交状态。</small><small>北京时间日期 ${status.today} · 快照生成 ${esc(DATA.generated||'未知')} · ${loadError?'刷新失败，保留旧快照':'自动刷新只检查发布更新，分时/日K在弹窗单独读取'}</small>`;
 }
 function renderExplorer(){
   if(!document.getElementById('research').open||selectionView!=='search')return;
