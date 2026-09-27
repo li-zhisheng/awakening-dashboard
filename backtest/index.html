@@ -15,9 +15,17 @@
     body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0}
     button,input,select{font:inherit}
     header{border-bottom:1px solid var(--line);background:#12181b}
-    .top{max-width:1440px;margin:auto;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+    .top{max-width:1440px;margin:auto;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
     h1{font-size:24px;margin:0;font-weight:680}
     .sub{color:var(--muted);margin-top:3px}
+    .header-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap}
+    .panel-switcher{display:flex;border:1px solid #3b4a51;border-radius:6px;overflow:hidden;background:#0f1417}
+    .panel-switcher a{display:flex;align-items:center;min-height:34px;padding:0 11px;color:var(--muted);
+      font-size:12px;font-weight:650;text-decoration:none;border-right:1px solid #3b4a51}
+    .panel-switcher a:last-child{border-right:0}
+    .panel-switcher a:hover{background:#202b31;color:var(--text)}
+    .panel-switcher a[aria-current="page"]{background:#2a3a40;color:#fff}
+    .panel-switcher a:focus-visible{outline:2px solid var(--amber);outline-offset:-3px}
     .env{display:flex;align-items:center;gap:8px;color:#101417;background:var(--amber);padding:5px 9px;border-radius:4px;font-weight:700;white-space:nowrap}
     .env i{width:8px;height:8px;border-radius:50%;background:#101417}
     .toolbar{border-bottom:1px solid var(--line);background:#141a1e}
@@ -79,7 +87,13 @@
 <header>
   <div class="top">
     <div><h1>Awakening 历史回测</h1><div class="sub" id="subtitle">等待研究数据</div></div>
-    <div class="env"><i></i>研究环境</div>
+    <div class="header-actions">
+      <nav class="panel-switcher" aria-label="面板切换">
+        <a href="../">量化交易</a>
+        <a href="./" aria-current="page">历史回测</a>
+      </nav>
+      <div class="env"><i></i>研究环境</div>
+    </div>
   </div>
 </header>
 <div class="toolbar">

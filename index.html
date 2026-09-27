@@ -389,7 +389,16 @@
     box-shadow:0 0 28px #22d3ee20;color:var(--c-cyan);font-size:25px;font-weight:800}
   .eyebrow{font-size:10px;letter-spacing:3px;color:var(--sub);margin-bottom:5px}
   .title h1{font-size:29px;letter-spacing:4px}
-  .top-actions{display:flex;align-items:center;gap:14px}
+  .top-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap}
+  .panel-switcher{display:flex;border:1px solid #314365;border-radius:8px;overflow:hidden;
+    background:#0d1728}
+  .panel-switcher a{display:flex;align-items:center;min-height:34px;padding:0 11px;
+    color:var(--sub);font-size:12px;font-weight:600;text-decoration:none;
+    border-right:1px solid #314365;transition:background-color .15s,color .15s}
+  .panel-switcher a:last-child{border-right:0}
+  .panel-switcher a:hover{background:#172640;color:var(--txt)}
+  .panel-switcher a[aria-current="page"]{background:#243555;color:#fff}
+  .panel-switcher a:focus-visible{outline:2px solid #fbbf24;outline-offset:-3px}
   .action-btn{border:1px solid #314365;background:#131e33;color:var(--txt);
     border-radius:9px;padding:8px 12px;cursor:pointer;font:inherit;font-size:12px}
   .action-btn:hover{border-color:var(--accent);box-shadow:var(--glow-cyan)}
@@ -494,6 +503,10 @@
     <div><span class="dot-live" id="live-dot"></span><span id="live-label">快照刷新</span> · <span id="countdown">30</span>s</div>
     <div id="generated" role="status" aria-live="polite">正在读取真实数据…</div>
   </div>
+  <nav class="panel-switcher" aria-label="面板切换">
+    <a href="./" aria-current="page">量化交易</a>
+    <a href="backtest/">历史回测</a>
+  </nav>
   <button class="action-btn" id="refresh-btn">刷新数据</button>
   </div>
 </div>
