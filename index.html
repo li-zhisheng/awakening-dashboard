@@ -518,7 +518,7 @@
     <button type="button" id="quote-daily-tab" data-view="daily" role="tab" aria-selected="false">日K</button>
   </div>
   <label class="quote-indicator" id="quote-trend-wrap" hidden>
-    <input type="checkbox" id="quote-trend" checked> 显示多空趋势代理
+    <input type="checkbox" id="quote-trend"> 显示实验多空代理
   </label>
   <div id="quote-chart" class="quote-chart" role="img" aria-label="分时价格走势图" hidden></div>
   <p id="quote-status" class="quote-status" role="status" aria-live="polite">正在读取行情…</p>
@@ -1314,7 +1314,7 @@ function setQuoteView(view){
   quoteEl('trend-wrap').hidden=view!=='daily';
   quoteEl('note').innerHTML=view==='minute'
     ?'腾讯行情 · 可能延迟 · 每15秒刷新<br>虚线为昨收（0%）；高低点按分时采样，同价取首次，非逐笔极值。'
-    :'腾讯前复权日K · 按需读取近120个交易日<br>多：收盘&gt;MA5&gt;MA10&gt;MA20；空：收盘&lt;MA5&lt;MA10，仅标记状态切换。该代理可审计，并非同花顺原公式。';
+    :'腾讯前复权日K · 按需读取近120个交易日<br>实验代理默认关闭：多=收盘&gt;MA5&gt;MA10&gt;MA20；空=收盘&lt;MA5&lt;MA10，仅作研究对照，并非同花顺原公式或已验证交易信号。';
   quoteEl('refresh').disabled=false;
   if(view==='minute'){
     if(quoteState.minute)drawMinuteQuote(quoteState.minute);
@@ -1333,12 +1333,12 @@ function openQuote(code,name){
   dailyController?.abort();dailyController=null;
   clearInterval(quoteTimer);
   quoteState={symbol,code,name:name||code,loaded:false,view:'minute',minute:null,
-    daily:dailyCache.get(symbol)||null,trend:true};
+    daily:dailyCache.get(symbol)||null,trend:false};
   quoteEl('title').textContent=name||code;
   quoteEl('price').className='quote-price';quoteEl('price').textContent='—';
   quoteEl('change').className='quote-change';quoteEl('change').textContent='—';
   quoteEl('time').textContent='';
-  quoteEl('trend').checked=true;
+  quoteEl('trend').checked=false;
   quoteEl('chart').hidden=true;quoteChart?.clear();
   if(!quoteDialog.open)quoteDialog.showModal();
   setQuoteView('minute');
