@@ -268,6 +268,11 @@
   .selection-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
     flex-wrap:wrap;margin-bottom:4px}
   .selection-head h3{margin:0}
+  .returns-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    flex-wrap:wrap;margin-bottom:8px}
+  .returns-head h3{margin:0}
+  .returns-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .returns-controls .grp{margin:0}
   .hold-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
   .hold-head select{background:var(--panel2);color:var(--txt);border:1px solid var(--border);
     border-radius:8px;padding:6px 10px;font-size:13px}
@@ -591,11 +596,25 @@
     </div>
   </div>
 
-  <div class="card"><h3 id="bar-title">三周期平均收益对比</h3>
-    <div class="desc">颜色区分持有周期，正负轴表示盈亏</div><div class="chart" id="barChart"></div></div>
-  <div class="card"><h3 id="nav-title">各批次 Top5 净收益</h3>
-    <div class="desc">每点对应一次选股批次，缺少完整 Top5 结果时留空。不同批次持仓时间可能重叠，本图不代表账户资金净值。</div>
-    <div class="chart" id="navChart"></div></div>
+  <div class="card span2" id="returns-analysis">
+    <div class="returns-head">
+      <h3 id="returns-title">Top5净收益分析</h3>
+      <div class="returns-controls">
+        <div class="selection-tabs" id="returns-view" role="tablist" aria-label="收益分析视图">
+          <button type="button" data-returns-view="average" class="on" role="tab" aria-selected="true">模型均值</button>
+          <button type="button" data-returns-view="batches" role="tab" aria-selected="false">各批次走势</button>
+        </div>
+        <span class="lbl">图表周期</span>
+        <div class="grp" id="returns-horizon" aria-label="图表持有周期">
+          <button type="button" data-returns-h="1">D+1</button>
+          <button type="button" data-returns-h="3">D+3</button>
+          <button type="button" data-returns-h="5" class="on">D+5</button>
+        </div>
+      </div>
+    </div>
+    <div class="desc" id="returns-desc"></div>
+    <div class="chart" id="returnsChart" role="img"></div>
+  </div>
 
   <div class="card span2" id="overlap-wrap"></div>
 </div>
@@ -623,6 +642,7 @@
 <script>
 let DATA=null, distH=5, session='am', sampleMode='complete';
 const basis='open';
+let returnsView='average', returnsH=5;
 let sessionChosen=false;
 let activeBatch='';
 function currentCohort(){
@@ -830,46 +850,65 @@ function renderHoldings(){
 /* 共识（集成）为虚拟模型；其余策略统一进入排名、图表和明细。 */
 function realModels(){return DATA.models.filter(m=>!m.virtual);}
 function names(){return realModels().map(m=>m.name);}
-function renderBar(){
-  const series=[1,3,5].map(h=>({
-    name:'D+'+h,type:'bar',barMaxWidth:22,
-    data:realModels().map(m=>{
-      const v=buyCell(m,h).mean;
-      return {value:v==null?null:+(v*100).toFixed(2)};})
-  }));
-  chart('barChart').setOption({
-    animation:fxEnabled&&!reducedMotion.matches,
-    color:['#38bdf8','#a78bfa','#fbbf24'],
-    tooltip:{trigger:'axis',...tip,valueFormatter:v=>v==null?'—':v+'%'},
-    legend:{top:6,textStyle:{color:'#8b9bb8'}},
-    grid:{...baseGrid,bottom:60},
-    xAxis:{type:'category',data:names(),...axisStyle,axisLabel:modelAxisLabel},
-    yAxis:{type:'value',name:'%',...axisStyle},
-    series
-  },true);
-  document.getElementById('bar-title').textContent=
-    (session==='am'?'早盘':'午盘')+'三周期 Top5 净收益对比';
-}
-/* nav */
-function renderNav(){
-  const c=DATA.curves[String(distH)][basis+session];
-  const sCohorts=DATA.cohorts.filter(cc=>cc.session===session);
-  const xDates=c.dates.map((d,i)=>{const co=sCohorts[i];return co&&co.entry?co.entry:d;});
-  const series=realModels().map(m=>({
-    name:m.name,type:'line',smooth:false,connectNulls:false,showSymbol:true,symbolSize:6,
-    lineStyle:{width:2,color:m.color},itemStyle:{color:m.color},
-    data:(c[sampleMode+'_returns']?.[m.key]||[]).map(v=>v==null?null:+(v*100).toFixed(2))
-  }));
-  chart('navChart').setOption({
-    animation:fxEnabled&&!reducedMotion.matches,
-    tooltip:{trigger:'axis',...tip,valueFormatter:v=>v==null?'—':v>=0?`+${v}%`:`${v}%`},
-    legend:{top:6,type:'scroll',textStyle:{color:'#8b9bb8'}},
-    grid:{...baseGrid,top:50},
-    xAxis:{type:'category',data:xDates,...axisStyle},
-    yAxis:{type:'value',name:'净收益%',...axisStyle},
-    series
-  },true);
-  document.getElementById('nav-title').textContent=`各批次 Top5 净收益 · D+${distH}`;
+function renderReturnsAnalysis(){
+  document.querySelectorAll('#returns-view button').forEach(button=>{
+    const selected=button.dataset.returnsView===returnsView;
+    button.classList.toggle('on',selected);
+    button.setAttribute('aria-selected',String(selected));
+  });
+  document.querySelectorAll('#returns-horizon button').forEach(button=>{
+    const selected=Number(button.dataset.returnsH)===returnsH;
+    button.classList.toggle('on',selected);
+    button.setAttribute('aria-pressed',String(selected));
+  });
+  const title=document.getElementById('returns-title');
+  const desc=document.getElementById('returns-desc');
+  const chartEl=document.getElementById('returnsChart');
+  const period=`D+${returnsH}`, sess=session==='am'?'早盘':'午盘';
+  if(returnsView==='average'){
+    const series=[{
+      name:period,type:'bar',barMaxWidth:28,
+      data:realModels().map(m=>{
+        const value=buyCell(m,returnsH).mean;
+        return {value:value==null?null:+(value*100).toFixed(2),
+          itemStyle:{color:m.color}};
+      })
+    }];
+    chart('returnsChart').setOption({
+      animation:fxEnabled&&!reducedMotion.matches,
+      tooltip:{trigger:'axis',...tip,valueFormatter:v=>v==null?'—':v>=0?`+${v}%`:`${v}%`},
+      grid:{...baseGrid,top:28,bottom:60},
+      xAxis:{type:'category',data:names(),...axisStyle,axisLabel:modelAxisLabel},
+      yAxis:{type:'value',name:'净收益%',...axisStyle},
+      series
+    },true);
+    title.textContent=`${sess} Top5 模型平均净收益 · ${period}`;
+    desc.textContent='每根柱表示一个模型在当前样本口径下的Top5批次平均净收益；图表周期独立于上方排名周期。';
+  }else{
+    const c=DATA.curves?.[String(returnsH)]?.[basis+session]||{dates:[]};
+    const sCohorts=DATA.cohorts.filter(cohort=>cohort.session===session);
+    const xDates=(c.dates||[]).map((date,index)=>{
+      const cohort=sCohorts[index];return cohort&&cohort.entry?cohort.entry:date;
+    });
+    const series=realModels().map(m=>({
+      name:m.name,type:'line',smooth:false,connectNulls:false,showSymbol:true,symbolSize:6,
+      lineStyle:{width:2,color:m.color},itemStyle:{color:m.color},
+      data:(c[sampleMode+'_returns']?.[m.key]||[]).map(
+        value=>value==null?null:+(value*100).toFixed(2))
+    }));
+    chart('returnsChart').setOption({
+      animation:fxEnabled&&!reducedMotion.matches,
+      tooltip:{trigger:'axis',...tip,valueFormatter:v=>v==null?'—':v>=0?`+${v}%`:`${v}%`},
+      legend:{top:6,type:'scroll',textStyle:{color:'#8b9bb8'}},
+      grid:{...baseGrid,top:50},
+      xAxis:{type:'category',data:xDates,...axisStyle},
+      yAxis:{type:'value',name:'净收益%',...axisStyle},
+      series
+    },true);
+    title.textContent=`${sess}各批次 Top5 净收益 · ${period}`;
+    desc.textContent='每点对应一次选股批次，缺少完整Top5结果时留空；不同批次持仓时间可能重叠，本图不代表账户资金净值。';
+  }
+  chartEl.setAttribute('aria-label',title.textContent);
 }
 
 /* overlap: 前五推荐逐对去重；原始全名单矩阵仅供展开研究。 */
@@ -1577,7 +1616,7 @@ document.getElementById('selection-mode').onclick=e=>{
 };
 function renderResearch(){
   if(!DATA||!document.getElementById('research').open)return;
-  renderKPIs();renderTable();renderSelectionWorkspace();renderBar();renderNav();renderHeat();
+  renderKPIs();renderTable();renderSelectionWorkspace();renderReturnsAnalysis();renderHeat();
   Object.values(charts).forEach(c=>c.resize());
 }
 document.getElementById('research').addEventListener('toggle',renderResearch);
@@ -1690,6 +1729,16 @@ document.getElementById('horizon-grp').onclick=e=>{
   const b=e.target.closest('button');if(!b)return;distH=+b.dataset.h;
   document.querySelectorAll('#horizon-grp button').forEach(x=>x.classList.toggle('on',x===b));
   if(DATA)renderAll();
+};
+document.getElementById('returns-view').onclick=e=>{
+  const button=e.target.closest('button[data-returns-view]');if(!button)return;
+  returnsView=button.dataset.returnsView;
+  if(DATA)renderReturnsAnalysis();
+};
+document.getElementById('returns-horizon').onclick=e=>{
+  const button=e.target.closest('button[data-returns-h]');if(!button)return;
+  returnsH=Number(button.dataset.returnsH);
+  if(DATA)renderReturnsAnalysis();
 };
 /* rank table: click model name → holdings */
 document.getElementById('rank-table').addEventListener('click',e=>{
