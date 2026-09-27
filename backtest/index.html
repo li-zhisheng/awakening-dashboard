@@ -168,11 +168,28 @@ function availableMonths(node){
   const values=variants.flatMap(([h,mode])=>monthRows(node,h,mode).map(x=>x.month));
   return [...new Set(values)].sort();
 }
+function monthsInSelectedRange(node){
+  const startMonth=compactDate($('start').value).slice(0,6);
+  const endMonth=compactDate($('end').value).slice(0,6);
+  return availableMonths(node).filter(month=>
+    (!startMonth||month>=startMonth)&&(!endMonth||month<=endMonth));
+}
+function selectDateMonth(input){
+  const start=$('start'),end=$('end');
+  if(start.value&&end.value&&start.value>end.value){
+    if(input===start)end.value=start.value;
+    else start.value=end.value;
+  }
+  MONTH=compactDate(input.value).slice(0,6);
+  render();
+}
 function render(){
   const coverage=DATA.coverage||{},source=DATA.source||{};
   $('subtitle').textContent=`策略 ${DATA.strategy_version||'—'} · ${DATA.range?.from||'—'} 至 ${DATA.range?.through||'—'}`;
   if(!$('start').value)$('start').value=dateInput(DATA.range?.from);
   if(!$('end').value)$('end').value=dateInput(DATA.range?.through);
+  $('start').min=$('end').min=dateInput(DATA.range?.from);
+  $('start').max=$('end').max=dateInput(DATA.range?.through);
   const manifest=shortHash(DATA.selection_manifest_hash);
   $('source').textContent=source.name?`数据源：${source.name} · 运行 ${shortHash(DATA.run_id)} · Top5清单 ${manifest}`:'未加载历史数据包';
   $('generated').textContent=DATA.generated_at?`生成 ${new Date(DATA.generated_at).toLocaleString('zh-CN',{hour12:false})}`:'';
@@ -188,9 +205,12 @@ function render(){
   if(!models.includes(MODEL))MODEL=models[0]||'';
   $('model').innerHTML=models.map(m=>`<option value="${esc(m)}" ${m===MODEL?'selected':''}>${esc(names[m]||m)}</option>`).join('');
   const node=DATA.results?.[LAYER]?.[MODEL];
-  const months=availableMonths(node);
+  const months=monthsInSelectedRange(node);
   if(!months.includes(MONTH))MONTH=months.at(-1)||'';
-  $('month').innerHTML=months.map(m=>`<option value="${m}" ${m===MONTH?'selected':''}>${m.slice(0,4)}-${m.slice(4)}</option>`).join('');
+  $('month').innerHTML=months.length
+    ?months.map(m=>`<option value="${m}" ${m===MONTH?'selected':''}>${m.slice(0,4)}-${m.slice(4)}</option>`).join('')
+    :'<option value="">所选日期内无已实现收益</option>';
+  $('month').disabled=!months.length;
   renderMonthSummary(node);renderModels(models);renderMonthlyMatrix(models);
   renderMonthlyDetail(node);renderRuns();renderChart();
   $('warnings').innerHTML=(DATA.warnings||[]).map(w=>`<div>· ${esc(w)}</div>`).join('');
@@ -289,6 +309,8 @@ async function run(){
 }
 document.querySelectorAll('[data-layer]').forEach(b=>b.onclick=()=>{LAYER=b.dataset.layer;document.querySelectorAll('[data-layer]').forEach(x=>x.classList.toggle('active',x===b));render()});
 $('horizon').onchange=render;$('exit-mode').onchange=render;
+$('start').onchange=e=>selectDateMonth(e.target);
+$('end').onchange=e=>selectDateMonth(e.target);
 $('model').onchange=e=>{MODEL=e.target.value;MONTH='';render()};
 $('month').onchange=e=>{MONTH=e.target.value;renderMonthSummary(DATA.results?.[LAYER]?.[MODEL])};
 $('run').onclick=run;$('refresh').onclick=load;window.onresize=()=>CHART?.resize();load();
