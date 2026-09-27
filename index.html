@@ -273,6 +273,17 @@
   .returns-head h3{margin:0}
   .returns-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .returns-controls .grp{margin:0}
+  .returns-controls .lbl{font-size:11px;color:var(--mut);font-weight:600}
+  #returns-horizon{display:grid;grid-template-columns:repeat(3,52px);gap:3px;padding:3px;
+    border:1px solid #334155;border-radius:8px;background:#0a1222;
+    box-shadow:inset 0 1px 4px rgba(0,0,0,.35)}
+  #returns-horizon button{min-width:52px;height:32px;padding:0;border:0;border-radius:5px;
+    background:transparent;color:#91a0b9;font:600 12px/1 inherit;letter-spacing:0;
+    font-variant-numeric:tabular-nums;cursor:pointer;transition:background-color .15s,color .15s,box-shadow .15s}
+  #returns-horizon button:hover{background:#17243a;color:#dce7f7}
+  #returns-horizon button.on{background:#67e8f9;color:#07131f;
+    box-shadow:0 1px 8px rgba(34,211,238,.28)}
+  #returns-horizon button:focus-visible{outline:2px solid #fbbf24;outline-offset:2px}
   .hold-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
   .hold-head select{background:var(--panel2);color:var(--txt);border:1px solid var(--border);
     border-radius:8px;padding:6px 10px;font-size:13px}
