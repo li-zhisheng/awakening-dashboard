@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#080d1b">
 <title>量化交易 · 选股质量看板</title>
 <script src="echarts.min.js"></script>
-<script src="dashboard-tools.js?v=a0db6f21451d2fc9"></script>
+<script src="dashboard-tools.js?v=bcccb3e32631777d"></script>
 <style>
   :root{
     --bg:#0a0f1e; --panel:#121a2e; --panel2:#0e1526;
@@ -683,7 +683,8 @@ function chooseBatch(key){
 document.getElementById('batch-select').onchange=e=>chooseBatch(e.target.value);
 document.getElementById('latest-batch').onclick=()=>{sessionChosen=false;activeBatch='';renderAll();};
 let _lastSig='';
-const _CACHE_KEY='aw_quant_dash_v1';
+const _CACHE_KEY='aw_quant_dash_v2';
+const _LEGACY_CACHE_KEY='aw_quant_dash_v1';
 let selModel='', selCohort='';
 let showOHLC=false;
 let sortKey='d5.top5', sortDir=-1;
@@ -1519,7 +1520,7 @@ let snapshotTag='', pendingSnapshotTag='';
 async function fetchSnapshot(attempts=3){
   // 连接建立阶段的瞬时抖动(ERR_SOCKET_NOT_CONNECTED等)本轮内快速重试, 不必等30s。
   for(let i=0;i<attempts;i++){
-    const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),15000);
+    const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),30000);
     try{
       const headers=snapshotTag&&DATA?{'If-None-Match':snapshotTag}:{};
       const r=await fetch('data.json',{cache:'no-cache',headers,signal:ctrl.signal});
@@ -1561,7 +1562,13 @@ async function refresh(){
       return;
     }
     DATA=next;loadError=false;
-    try{localStorage.setItem(_CACHE_KEY,sig);}catch(_){}
+    try{
+      localStorage.setItem(_CACHE_KEY,sig);
+      localStorage.removeItem(_LEGACY_CACHE_KEY);
+    }catch(_){
+      localStorage.removeItem(_CACHE_KEY);
+      localStorage.removeItem(_LEGACY_CACHE_KEY);
+    }
     document.getElementById('generated').textContent='快照生成于 '+DATA.generated+' 北京时间';
     renderAll();
     _lastSig=sig;
@@ -1837,16 +1844,20 @@ document.addEventListener('visibilitychange',()=>{
 document.getElementById('refresh-btn').onclick=()=>{cd=REFRESH_EVERY;refresh();};
 // 先渲染本地最后有效快照, 弱网下不再长时间空白; 随后后台静默更新。
 try{
+  localStorage.removeItem(_LEGACY_CACHE_KEY);
   const cached=localStorage.getItem(_CACHE_KEY);
   if(cached){
     const prev=JSON.parse(cached);
-    if(Array.isArray(prev.models)&&prev.holdings&&prev.curves){
+    if(Array.isArray(prev.models)&&prev.holdings&&prev.curves
+        &&DashboardTools.cacheFresh(prev)){
       DATA=prev;_lastSig=cached;loadError=false;
       document.getElementById('generated').textContent='快照生成于 '+DATA.generated+' 北京时间 · 本地缓存';
       renderAll();
+    }else{
+      localStorage.removeItem(_CACHE_KEY);
     }
   }
-}catch(_){}
+}catch(_){localStorage.removeItem(_CACHE_KEY);}
 refresh();
 </script>
 </body>

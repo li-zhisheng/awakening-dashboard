@@ -33,6 +33,11 @@
   function batchLabel(key){
     return `${String(key).slice(0,4)}-${String(key).slice(4,6)}-${String(key).slice(6,8)} · ${sessionOf(key)==='pm'?'午盘':'早盘'}`;
   }
+  function cacheFresh(data,now=new Date(),maxAgeMs=15*60*1000){
+    const value=String(data?.generated||'').replace(' ','T')+'+08:00';
+    const stamp=Date.parse(value),age=now.getTime()-stamp;
+    return Number.isFinite(stamp)&&age>=-60*1000&&age<=maxAgeMs;
+  }
   function fillBreakdown(model){
     if(!model?.picks)return {available:false,filled:0,blocked:0,unknown:0,vacant:0};
     const f=model.fills||{}, filled=f.filled||0;
@@ -149,7 +154,7 @@
         slots,metrics};
     });
   }
-  const api={date8,sessionOf,beijingDay,freshness,latestSession,batches,batchLabel,fillBreakdown,stockIndex,filterStocks,stocksCSV,holdingReturn,realReturns};
+  const api={date8,sessionOf,beijingDay,freshness,latestSession,batches,batchLabel,cacheFresh,fillBreakdown,stockIndex,filterStocks,stocksCSV,holdingReturn,realReturns};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   else root.DashboardTools=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
