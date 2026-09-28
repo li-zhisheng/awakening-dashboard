@@ -685,6 +685,12 @@ document.getElementById('latest-batch').onclick=()=>{sessionChosen=false;activeB
 let _lastSig='';
 const _CACHE_KEY='aw_quant_dash_v2';
 const _LEGACY_CACHE_KEY='aw_quant_dash_v1';
+function clearSnapshotCache(){
+  try{
+    localStorage.removeItem(_CACHE_KEY);
+    localStorage.removeItem(_LEGACY_CACHE_KEY);
+  }catch(_){}
+}
 let selModel='', selCohort='';
 let showOHLC=false;
 let sortKey='d5.top5', sortDir=-1;
@@ -1566,8 +1572,7 @@ async function refresh(){
       localStorage.setItem(_CACHE_KEY,sig);
       localStorage.removeItem(_LEGACY_CACHE_KEY);
     }catch(_){
-      localStorage.removeItem(_CACHE_KEY);
-      localStorage.removeItem(_LEGACY_CACHE_KEY);
+      clearSnapshotCache();
     }
     document.getElementById('generated').textContent='快照生成于 '+DATA.generated+' 北京时间';
     renderAll();
@@ -1854,10 +1859,10 @@ try{
       document.getElementById('generated').textContent='快照生成于 '+DATA.generated+' 北京时间 · 本地缓存';
       renderAll();
     }else{
-      localStorage.removeItem(_CACHE_KEY);
+      clearSnapshotCache();
     }
   }
-}catch(_){localStorage.removeItem(_CACHE_KEY);}
+}catch(_){clearSnapshotCache();}
 refresh();
 </script>
 </body>
