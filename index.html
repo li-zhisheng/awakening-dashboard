@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#080d1b">
 <title>量化交易 · 选股质量看板</title>
 <script src="echarts.min.js"></script>
-<script src="dashboard-tools.js?v=4c590ca90834a7f4"></script>
+<script src="dashboard-tools.js?v=b4da813d316f4d5e"></script>
 <style>
   :root{
     --bg:#0a0f1e; --panel:#121a2e; --panel2:#0e1526;
@@ -823,6 +823,27 @@ function gradeBadge(g){if(!g)return '';
 function renderHoldings(){
   renderHoldHead();
   const rows=(DATA.holdings[selCohort]||{})[selModel]||[];
+  const stages=DATA.selection_pipeline?.dates?.[selCohort.slice(0,8)]?.[selModel]||{};
+  const fallback=session==='pm'
+    ?(stages.midday?['midday','午盘观察',stages.midday]:null)
+    :(stages.confirm?['confirm','竞价确认',stages.confirm]:
+      stages.watch?['watch','早盘观察',stages.watch]:null);
+  if(!rows.length&&fallback?.[2]?.pool?.length){
+    const [stage,label,node]=fallback;
+    const score=p=>p.confirm_score??p.watch_score??p.score;
+    document.getElementById('hold-table').innerHTML=`<thead><tr>
+      <th>排名</th><th>代码</th><th>名称</th><th>当前阶段</th>
+      <th>阶段评分</th><th>行业</th><th>执行状态</th></tr></thead><tbody>
+      ${node.pool.map(p=>`<tr>
+        <td>${p.rank}${gradeBadge(p.grade)}</td><td>${esc(p.code)}</td>
+        <td style="text-align:left"><button class="mlink" style="border:0;background:none;font:inherit"
+          data-quote-code="${esc(p.code)}" data-quote-name="${esc(p.name)}">${esc(p.name)}</button></td>
+        <td>${esc(label)}</td><td>${score(p)==null?'—':Number(score(p)).toFixed(2)}</td>
+        <td>${esc(p.selection?.sector||'—')}</td>
+        <td>${esc(stage==='confirm'?'已确认，等待成交核验':'候选观察，未形成最终买入名单')}</td>
+      </tr>`).join('')}</tbody>`;
+    return;
+  }
   const head=`<thead><tr>
     <th>名单</th><th>代码</th><th>名称</th>
     <th>信号日</th><th>信开</th><th>信高</th><th>信低</th><th>信收</th>
@@ -864,7 +885,10 @@ function renderHoldings(){
       <td>${retCell(r,'1')}</td><td>${retCell(r,'3')}</td><td>${retCell(r,'5')}</td>
     </tr>`;
   }).join('')+'</tbody>';
-  document.getElementById('hold-table').innerHTML=head+(rows.length?body:'<tbody><tr><td colspan="19" class="empty-row">当前模型在此场次暂无选股名单</td></tr></tbody>');
+  const missing=stages.watch&&!stages.confirm
+    ?'早盘观察名单已恢复，但09:25竞价确认未执行，因此没有最终买入名单'
+    :'当前模型在此场次暂无选股名单';
+  document.getElementById('hold-table').innerHTML=head+(rows.length?body:`<tbody><tr><td colspan="19" class="empty-row">${missing}</td></tr></tbody>`);
   document.querySelectorAll('#hold-table tr').forEach(tr=>{
     if(tr.children.length<19)return;
     [4,5,6,10,11,13,14].forEach(i=>tr.children[i].hidden=!showOHLC);
@@ -1660,6 +1684,7 @@ function renderRealReturns(){
     :'前5个可成交槽位等权；确认不可成交记现金0，缺数据保留状态。当日涨跌未扣费，D+1/3/5扣预估往返成本；价格可达性估计不代表实际成交。';
   const cost=(DATA.cost_bps||0)/10000;
   const rows=DashboardTools.realReturns(DATA,activeBatch,cost);
+  const hasHoldings=Object.keys(DATA.holdings?.[activeBatch]||{}).length>0;
   const cell=(m,col)=>{
     const x=m.metrics[col];
     if(x.pending===5)return '<span class="na">—</span>';
@@ -1672,14 +1697,18 @@ function renderRealReturns(){
   };
   const head=`<thead><tr><th>模型 / 策略</th><th>${fixed?'冻结价':'开盘价'}</th>`
     +'<th>当日涨跌</th><th>D+1净</th><th>D+3净</th><th>D+5净</th></tr></thead>';
-  const body='<tbody>'+rows.map(m=>{
+  const body='<tbody>'+(hasHoldings?rows.map(m=>{
     const tip=m.slots.map(c=>`#${c.slot} ${c.name}`).join('\n');
     const cash=!fixed&&m.cash?` <small>(${m.cash}槽未成交)</small>`:'';
     return `<tr title="${esc(tip)}"><td class="rr-name" ${m.color?`style="color:${m.color}"`:''}>${esc(m.name)}</td>`
       +`<td><b>${fixed?m.priced:m.filled}/5</b>${cash}</td>`
       +`<td>${cell(m,'oc')}</td><td>${cell(m,'d1')}</td>`
       +`<td>${cell(m,'d3')}</td><td>${cell(m,'d5')}</td></tr>`;
-  }).join('')+'</tbody>';
+  }).join(''):`<tr><td colspan="6" class="empty-row">${
+    DATA.selection_pipeline?.dates?.[activeBatch.slice(0,8)]
+      ?'当前日期尚未形成最终名单；已冻结的阶段候选可在下方“选股明细”查看'
+      :'当前日期暂无收益与持仓数据'
+  }</td></tr>`)+'</tbody>';
   wrap.innerHTML=head+body;
 }
 function renderPipeline(){

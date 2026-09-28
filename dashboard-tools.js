@@ -50,7 +50,16 @@
     const stocks=new Map();
     const names=new Map((data.models||[]).map(m=>[m.key,m.name]));
     names.set('quality','质量精选');names.set('ensemble','模型共识');names.set('system','热榜');
-    for(const [model,rows] of Object.entries(data.holdings?.[cohort]||{})){
+    let sources=data.holdings?.[cohort]||{};
+    if(!Object.keys(sources).length){
+      const staged=data.selection_pipeline?.dates?.[date8(cohort)]||{};
+      sources=Object.fromEntries(Object.entries(staged).map(([model,nodes])=>{
+        const node=sessionOf(cohort)==='pm'
+          ?nodes.midday:(nodes.confirm||nodes.watch);
+        return [model,node?.pool||[]];
+      }));
+    }
+    for(const [model,rows] of Object.entries(sources)){
       if(model==='hot100')continue;
       for(const row of rows){
         const rank=Number(row.rank)||0;
