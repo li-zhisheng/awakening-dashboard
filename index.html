@@ -1633,7 +1633,7 @@ function renderExplorerRows(){
   explorerRows=DashboardTools.filterStocks(explorerStocks,query,explorerSource);
   const shown=explorerRows.slice(0,explorerLimit);
   document.getElementById('stock-meta').textContent=
-    `批次 ${explorerCohort||'暂无'} · 各策略仅取Top10，共 ${explorerStocks.length}只去重股票 · 匹配 ${explorerRows.length}只 / 显示 ${shown.length}只。历史百股原始名单仅保留在折叠复盘中。`;
+    `批次 ${explorerCohort||'暂无'} · 各策略仅取Top10，共 ${explorerStocks.length}只去重股票 · 匹配 ${explorerRows.length}只 / 显示 ${shown.length}只。完整原始名单保留在数据库与云备份。`;
   document.getElementById('stock-list').innerHTML=shown.length?shown.map(s=>`
     <article class="stock-item"><button data-quote-code="${esc(s.code)}" data-quote-name="${esc(s.name)}">${esc(s.name)}</button><small>${esc(s.code)}</small>
     <p class="stock-sources">${s.sources.map(x=>`${esc(x.name)} #${x.rank}`).join(' · ')}</p></article>`).join(''):
@@ -1738,7 +1738,7 @@ function renderPipeline(){
       const blocked=health.find(([key,h])=>key===day+'/'+stage&&Object.keys(h.errors||{}).length);
       return blocked?'数据缺失/异常 · 待核验':'尚未运行';
     }
-    const count=node.pool?.length||0;
+    const count=node.pool_count??node.pool?.length??0;
     if(stage==='confirm'){
       if(node.selection_outcome==='empty'||node.status==='abstain')return '空仓 · 无符合要求股票';
       if(node.selection_outcome==='partial'||count<10)return `少选 · ${count}/10 · 无多余符合要求股票`;
