@@ -28,12 +28,6 @@
       if(stages.has('watch')||stages.has('confirm'))keys.add(day);
       if(stages.has('midday'))keys.add(day+'pm');
     }
-    for(const key of Object.keys(data.selection_pipeline?.health||{})){
-      const [day,stage]=key.split('/');
-      if(!/^\d{8}$/.test(day))continue;
-      if(stage==='watch'||stage==='confirm')keys.add(day);
-      if(stage==='midday')keys.add(day+'pm');
-    }
     return [...keys].sort().reverse();
   }
   function batchLabel(key){
