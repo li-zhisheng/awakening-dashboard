@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#080d1b">
 <title>量化交易 · 选股质量看板</title>
 <script src="echarts.min.js"></script>
-<script src="dashboard-tools.js?v=78b07fdb75b1ebb1"></script>
+<script src="dashboard-tools.js?v=4c590ca90834a7f4"></script>
 <style>
   :root{
     --bg:#0a0f1e; --panel:#121a2e; --panel2:#0e1526;
@@ -1686,7 +1686,8 @@ function renderPipeline(){
   const wrap=document.getElementById('pipeline-wrap'), p=DATA.selection_pipeline;
   if(!p){wrap.innerHTML='';return;}
   const days=[...new Set([...Object.keys(p.dates||{}),...Object.keys(p.consensus||{}),...Object.keys(p.health||{}).map(k=>k.split('/')[0])])].sort().reverse();
-  const day=days[0], models=p.dates?.[day]||{};
+  const selectedDay=activeBatch.slice(0,8);
+  const day=days.includes(selectedDay)?selectedDay:days[0], models=p.dates?.[day]||{};
   const consensus=p.consensus?.[day];
   const stages=[['technical','盘后技术候选'],['watch','早盘观察'],['confirm','竞价确认']];
   const state={ready:'已完成',abstain:'无达标股票',confirmed:'买入资格已确认',observing:'持续观察'};

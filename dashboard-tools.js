@@ -16,13 +16,25 @@
     return {key,today,state};
   }
   function latestSession(data){
-    const keys=Object.keys(data.holdings||{})
-      .filter(k=>/^\d{8}(pm)?$/.test(k)).sort();
+    const keys=batches(data).slice().sort();
     return keys.length?sessionOf(keys[keys.length-1]):'am';
   }
   function batches(data){
-    return Object.keys(data.holdings||{})
-      .filter(k=>/^\d{8}(pm)?$/.test(k)).sort().reverse();
+    const keys=new Set(Object.keys(data.holdings||{})
+      .filter(k=>/^\d{8}(pm)?$/.test(k)));
+    for(const [day,models] of Object.entries(data.selection_pipeline?.dates||{})){
+      if(!/^\d{8}$/.test(day))continue;
+      const stages=new Set(Object.values(models||{}).flatMap(nodes=>Object.keys(nodes||{})));
+      if(stages.has('watch')||stages.has('confirm'))keys.add(day);
+      if(stages.has('midday'))keys.add(day+'pm');
+    }
+    for(const key of Object.keys(data.selection_pipeline?.health||{})){
+      const [day,stage]=key.split('/');
+      if(!/^\d{8}$/.test(day))continue;
+      if(stage==='watch'||stage==='confirm')keys.add(day);
+      if(stage==='midday')keys.add(day+'pm');
+    }
+    return [...keys].sort().reverse();
   }
   function batchLabel(key){
     return `${String(key).slice(0,4)}-${String(key).slice(4,6)}-${String(key).slice(6,8)} · ${sessionOf(key)==='pm'?'午盘':'早盘'}`;
