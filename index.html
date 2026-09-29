@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#080d1b">
 <title>量化交易 · 选股质量看板</title>
-<script src="echarts.min.js"></script>
 <script src="dashboard-tools.js?v=bcccb3e32631777d"></script>
 <style>
   :root{
@@ -695,6 +694,19 @@ let selModel='', selCohort='';
 let showOHLC=false;
 let sortKey='d5.top5', sortDir=-1;
 const charts={};
+let echartsPromise=null;
+function ensureEcharts(){
+  if(globalThis.echarts)return Promise.resolve(globalThis.echarts);
+  if(echartsPromise)return echartsPromise;
+  echartsPromise=new Promise((resolve,reject)=>{
+    const script=document.createElement('script');
+    script.src='echarts.min.js';script.async=true;
+    script.onload=()=>resolve(globalThis.echarts);
+    script.onerror=()=>{echartsPromise=null;reject(new Error('图表组件加载失败'));};
+    document.head.appendChild(script);
+  });
+  return echartsPromise;
+}
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
 const fxEnabled=false;
 let refreshing=false, loadError=false;
@@ -1219,6 +1231,12 @@ function drawQuoteHeader(q){
   quoteEl('time').textContent=`行情时间 ${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)} ${s.slice(8,10)}:${s.slice(10,12)}:${s.slice(12,14)} · 北京时间`;
 }
 function drawMinuteQuote(q){
+  if(!globalThis.echarts){
+    ensureEcharts().then(()=>{
+      if(quoteState?.minute===q&&quoteState.view==='minute')drawMinuteQuote(q);
+    }).catch(()=>{quoteEl('status').textContent='图表组件加载失败，请点击刷新重试。';});
+    return;
+  }
   drawQuoteHeader(q);
   const values=q.points.filter(v=>v!==null);
   quoteEl('chart').hidden=!values.length;
@@ -1273,6 +1291,12 @@ function drawMinuteQuote(q){
   quoteEl('status').textContent=q.date===nowDate?'拖动或轻触曲线查看时点价格。':'当前返回的是历史交易日行情，非今日实时数据。';
 }
 function drawDailyKline(data){
+  if(!globalThis.echarts){
+    ensureEcharts().then(()=>{
+      if(quoteState?.daily===data&&quoteState.view==='daily')drawDailyKline(data);
+    }).catch(()=>{quoteEl('status').textContent='图表组件加载失败，请点击刷新重试。';});
+    return;
+  }
   const bars=data.bars,dates=bars.map(bar=>bar.date.slice(5));
   const study=dailyTrendStudy(bars);
   const showTrend=quoteState?.trend!==false;
@@ -1674,9 +1698,15 @@ document.getElementById('selection-mode').onclick=e=>{
   selectionView=button.dataset.selectionView;
   renderSelectionWorkspace();
 };
-function renderResearch(){
+async function renderResearch(){
   if(!DATA||!document.getElementById('research').open)return;
-  renderKPIs();renderTable();renderSelectionWorkspace();renderReturnsAnalysis();renderHeat();
+  renderKPIs();renderTable();renderSelectionWorkspace();renderHeat();
+  try{await ensureEcharts();}catch(_){
+    document.getElementById('returns-desc').textContent='图表组件加载失败，请刷新后重试。';
+    return;
+  }
+  if(!DATA||!document.getElementById('research').open)return;
+  renderReturnsAnalysis();
   Object.values(charts).forEach(c=>c.resize());
 }
 document.getElementById('research').addEventListener('toggle',renderResearch);
