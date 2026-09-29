@@ -850,17 +850,21 @@ function renderHoldings(){
   if(!rows.length&&fallback?.[2]?.pool?.length){
     const [stage,label,node]=fallback;
     const score=p=>p.confirm_score??p.watch_score??p.score;
+    const percent=value=>Number.isFinite(value)?`${(value*100).toFixed(1)}%`:'—';
     document.getElementById('hold-table').innerHTML=`<thead><tr>
       <th>排名</th><th>代码</th><th>名称</th><th>当前阶段</th>
-      <th>阶段评分</th><th>行业</th><th>执行状态</th></tr></thead><tbody>
-      ${node.pool.map(p=>`<tr>
+      <th>阶段评分</th><th>MA20乖离</th><th>5日 / 20日涨幅</th>
+      <th>行业</th><th>执行状态</th></tr></thead><tbody>
+      ${node.pool.map(p=>{const risk=p.selection?.risk_profile||{};return `<tr>
         <td>${p.rank}${gradeBadge(p.grade)}</td><td>${esc(p.code)}</td>
         <td style="text-align:left"><button class="mlink" style="border:0;background:none;font:inherit"
           data-quote-code="${esc(p.code)}" data-quote-name="${esc(p.name)}">${esc(p.name)}</button></td>
         <td>${esc(label)}</td><td>${score(p)==null?'—':Number(score(p)).toFixed(2)}</td>
+        <td>${percent(risk.ma20_deviation)}</td>
+        <td>${percent(risk.return5)} / ${percent(risk.return20)}</td>
         <td>${esc(p.selection?.sector||'—')}</td>
         <td>${esc(stage==='confirm'?'已确认，等待成交核验':'候选观察，未形成最终买入名单')}</td>
-      </tr>`).join('')}</tbody>`;
+      </tr>`}).join('')}</tbody>`;
     return;
   }
   const head=`<thead><tr>
@@ -1760,6 +1764,8 @@ function renderPipeline(){
   const selectedDay=activeBatch.slice(0,8);
   const day=days.includes(selectedDay)?selectedDay:days[0], models=p.dates?.[day]||{};
   const consensus=p.consensus?.[day];
+  const riskGate=p.risk_gate;
+  const riskActive=riskGate&&day>=riskGate.effective_target;
   const stages=[['technical','盘后技术候选'],['watch','早盘观察'],['confirm','竞价确认']];
   const state={ready:'已完成',abstain:'无达标股票',confirmed:'买入资格已确认',observing:'持续观察'};
   const health=Object.entries(p.health||{}).filter(([k,v])=>k.startsWith(day+'/')&&v.status==='blocked');
@@ -1775,10 +1781,13 @@ function renderPipeline(){
       return '满选 · 10/10';
     }
     if(node.status==='abstain')return '空仓 · 策略无达标股票';
-    return `${state[node.status]||node.status} · ${count}只`;
+    const risk=node.risk_rejected_count
+      ?` · 追高风险排除${node.risk_rejected_count}只`:'';
+    return `${state[node.status]||node.status} · ${count}只${risk}`;
   };
   wrap.innerHTML=`<section class="operation-block"><h3>三层选股 · ${esc(day||'待准备')}</h3>
     <p class="overlap-meta">18:30 盘后全量技术筛选 → 07:50 财报与环境预检 → 08:20 关注度与事件过滤 → 09:25–09:30 竞价确认。所有时间均为北京时间。</p>
+    ${riskGate?`<p class="overlap-meta" style="color:${riskActive?'#67e8f9':'#fbbf24'}">统一追高风险门 ${esc(riskGate.version)} · ${riskActive?'本批次起启用：计算MA20乖离、5/20日涨幅、炸板和长上影后再进入观察池':'该历史批次生成时尚未应用；从 '+esc(riskGate.effective_target)+' 起启用'}</p>`:''}
     ${day?`<div class="table-wrap"><table><thead><tr><th>模型</th>${stages.map(([,label])=>`<th>${label}</th>`).join('')}</tr></thead><tbody>
     ${Object.entries(models).map(([name,nodes])=>`<tr><td>${esc(modelDisplayName(name))}</td>${stages.map(([stage])=>{
       const n=nodes[stage];return `<td>${esc(stageState(name,stage,n))}${n?`<br><small>${esc(String(n.frozen_at||'').replace('T',' ').slice(0,19))}</small>`:''}</td>`;
