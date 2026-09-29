@@ -1786,7 +1786,7 @@ function renderPipeline(){
     return `${state[node.status]||node.status} · ${count}只${risk}`;
   };
   wrap.innerHTML=`<section class="operation-block"><h3>三层选股 · ${esc(day||'待准备')}</h3>
-    <p class="overlap-meta">18:30 盘后全量技术筛选 → 07:50 财报与环境预检 → 08:20 关注度与事件过滤 → 09:25–09:30 竞价确认。所有时间均为北京时间。</p>
+    <p class="overlap-meta">18:30 盘后全量技术筛选 → 06:45 财报、环境与风险输入预检 → 08:20 关注度与事件过滤 → 09:25–09:30 竞价确认。所有时间均为北京时间。</p>
     ${riskGate?`<p class="overlap-meta" style="color:${riskActive?'#67e8f9':'#fbbf24'}">统一追高风险门 ${esc(riskGate.version)} · ${riskActive?'本批次起启用：计算MA20乖离、5/20日涨幅、炸板和长上影后再进入观察池':'该历史批次生成时尚未应用；从 '+esc(riskGate.effective_target)+' 起启用'}</p>`:''}
     ${day?`<div class="table-wrap"><table><thead><tr><th>模型</th>${stages.map(([,label])=>`<th>${label}</th>`).join('')}</tr></thead><tbody>
     ${Object.entries(models).map(([name,nodes])=>`<tr><td>${esc(modelDisplayName(name))}</td>${stages.map(([stage])=>{
