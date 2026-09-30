@@ -1519,7 +1519,7 @@ function drawDailyKline(data){
     ?`V2收盘信号 多${longCount}/空${shortCount}`
       +(data.signalThrough&&data.signalThrough<last.date
         ?`（截至${data.signalThrough}）`:'')
-    :'V2信号不可用';
+    :bars.length<60?`V2预热中（需60日，当前${bars.length}日）`:'V2信号不可用';
   quoteEl('status').textContent=`${data.source||''} · ${data.adjustment}日K · ${bars.length}个交易日 · 数据截至 ${last.date}`
     +(showTrend?` · ${signalStatus}`:'');
   renderTrendReview();
@@ -1612,7 +1612,7 @@ function setQuoteView(view){
   quoteEl('trend-review').hidden=view!=='daily';
   quoteEl('note').innerHTML=view==='minute'
     ?'腾讯行情 · 可能延迟 · 每15秒刷新<br>虚线为昨收（0%）；高低点按分时采样，同价取首次，非逐笔极值。'
-    :'前复权日K：腾讯最新数据优先，BaoStock静态数据兜底<br>多空点来自冻结的 FAST(21)/SLOW(6,34,6) 交叉与 ExtraTrees 过滤器；人工核对记录仅保存在当前浏览器，可导出 JSON。';
+    :'前复权日K：腾讯最新数据优先，本地已校验数据兜底<br>多空点来自冻结的 FAST(21)/SLOW(6,34,6) 交叉与 ExtraTrees 过滤器；人工核对记录仅保存在当前浏览器，可导出 JSON。';
   quoteEl('refresh').disabled=false;
   if(view==='minute'){
     if(quoteState.minute)drawMinuteQuote(quoteState.minute);
