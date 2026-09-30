@@ -1766,13 +1766,19 @@ function renderPipeline(){
   const consensus=p.consensus?.[day];
   const riskGate=p.risk_gate;
   const riskActive=riskGate&&day>=riskGate.effective_target;
-  const stages=[['technical','盘后技术候选'],['watch','早盘观察'],['confirm','竞价确认']];
+  const stages=[
+    ['technical','盘后技术候选'],['watch','早盘观察'],
+    ['confirm','竞价确认'],['midday','午盘观察']
+  ];
   const state={ready:'已完成',abstain:'无达标股票',confirmed:'买入资格已确认',observing:'持续观察'};
-  const health=Object.entries(p.health||{}).filter(([k,v])=>k.startsWith(day+'/')&&v.status==='blocked');
+  const health=Object.entries(p.health||{}).filter(
+    ([k,v])=>k.startsWith(day+'/')&&['blocked','unavailable'].includes(v.status));
   const stageState=(name,stage,node)=>{
     if(!node){
       const blocked=health.find(([key,h])=>key===day+'/'+stage&&Object.keys(h.errors||{}).length);
-      return blocked?'数据缺失/异常 · 待核验':'尚未运行';
+      const unavailable=health.find(([key,h])=>key===day+'/'+stage&&h.status==='unavailable');
+      return blocked?'数据缺失/异常 · 待核验'
+        :unavailable?'来源未配置 · 安全跳过':'尚未运行';
     }
     const count=node.pool_count??node.pool?.length??0;
     if(stage==='confirm'){
@@ -1792,10 +1798,11 @@ function renderPipeline(){
     ${Object.entries(models).map(([name,nodes])=>`<tr><td>${esc(modelDisplayName(name))}</td>${stages.map(([stage])=>{
       const n=nodes[stage];return `<td>${esc(stageState(name,stage,n))}${n?`<br><small>${esc(String(n.frozen_at||'').replace('T',' ').slice(0,19))}</small>`:''}</td>`;
     }).join('')}</tr>`).join('')}</tbody></table></div>`:'<p>盘后技术候选尚未冻结。</p>'}
-    ${health.map(([key,h])=>`<p class="overlap-meta" style="color:#fbbf24">${esc(key)} · 数据缺失/异常 · ${esc(h.at)}<br>${esc([...new Set(Object.values(h.errors||{}))].join('；'))}</p>`).join('')}
-    ${Object.entries(models).filter(([,n])=>n.watch||n.confirm).map(([name,n])=>{
-      const current=n.confirm||n.watch;
-      return `<details><summary>${esc(modelDisplayName(name))} · ${n.confirm?'竞价确认':'早盘观察'} ${current.pool.length}只</summary><p>${current.pool.map(s=>`${esc(s.code)} ${esc(s.name)}`).join(' · ')||'无达标股票'}</p></details>`;
+    ${health.map(([key,h])=>`<p class="overlap-meta" style="color:#fbbf24">${esc(key)} · ${h.status==='unavailable'?'来源未配置 · 安全跳过':'数据缺失/异常 · 待核验'} · ${esc(h.at)}<br>${esc(h.reason||[...new Set(Object.values(h.errors||{}))].join('；'))}</p>`).join('')}
+    ${Object.entries(models).filter(([,n])=>n.watch||n.confirm||n.midday).map(([name,n])=>{
+      const current=n.midday||n.confirm||n.watch;
+      const label=n.midday?'午盘观察':n.confirm?'竞价确认':'早盘观察';
+      return `<details><summary>${esc(modelDisplayName(name))} · ${label} ${current.pool.length}只</summary><p>${current.pool.map(s=>`${esc(s.code)} ${esc(s.name)}`).join(' · ')||'无达标股票'}</p></details>`;
     }).join('')}
     ${consensus?`<p class="overlap-meta">十二策略共识已冻结 · Top5主名单 + ${consensus.alternate_limit}支替补 · 主名单至少${consensus.primary_min_votes||3}票、替补至少${consensus.alternate_min_votes||2}票 · 每策略最多Top${consensus.vote_limit_per_strategy}投票<br><small>${esc(String(consensus.frozen_at||'').replace('T',' ').slice(0,19))}</small></p>`:''}
     <p class="overlap-meta">${esc(p.execution)}。确认后仍需09:30后的买点及持仓核验。</p></section>`;
