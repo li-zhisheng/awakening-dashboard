@@ -77,10 +77,39 @@
       return count(b)-count(a)||a.code.localeCompare(b.code);
     });
   }
+  function mergeStockCatalog(catalog,selected=[]){
+    const picked=new Map(selected.map(stock=>[stock.code,stock]));
+    const result=[], seen=new Set();
+    for(const row of catalog?.items||[]){
+      const code=String(Array.isArray(row)?row[0]:row?.code||'');
+      if(!/^\d{6}$/.test(code)||seen.has(code))continue;
+      seen.add(code);
+      const chosen=picked.get(code);
+      result.push({
+        code,
+        name:String((Array.isArray(row)?row[1]:row?.name)||chosen?.name||code)
+          .replace(/\s+/g,''),
+        daily:Boolean(Array.isArray(row)?row[2]:row?.daily),
+        signal:Boolean(Array.isArray(row)?row[3]:row?.signal),
+        sources:chosen?.sources||[],
+      });
+    }
+    for(const stock of selected){
+      if(seen.has(stock.code))continue;
+      result.push({...stock,daily:false,signal:false});
+    }
+    return result.sort((a,b)=>a.code.localeCompare(b.code));
+  }
+  function normalizedSearch(value){
+    return String(value??'').normalize('NFKC').toLocaleLowerCase()
+      .replace(/\s+/g,'');
+  }
   function filterStocks(stocks,query='',source='all'){
-    const q=query.trim().toLocaleLowerCase();
-    return stocks.filter(s=>(!q||s.code.includes(q)||s.name.toLocaleLowerCase().includes(q))
-      &&(source==='all'||s.sources.some(x=>x.key===source)));
+    const q=normalizedSearch(query);
+    return stocks.filter(s=>(!q||normalizedSearch(s.code).includes(q)
+      ||normalizedSearch(s.name).includes(q))
+      &&(source==='all'||(source==='selected'&&s.sources.length)
+        ||s.sources.some(x=>x.key===source)));
   }
   function csvCell(value){
     let s=String(value??'');
@@ -154,7 +183,7 @@
         slots,metrics};
     });
   }
-  const api={date8,sessionOf,beijingDay,freshness,latestSession,batches,batchLabel,cacheFresh,fillBreakdown,stockIndex,filterStocks,stocksCSV,holdingReturn,realReturns};
+  const api={date8,sessionOf,beijingDay,freshness,latestSession,batches,batchLabel,cacheFresh,fillBreakdown,stockIndex,mergeStockCatalog,filterStocks,stocksCSV,holdingReturn,realReturns};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   else root.DashboardTools=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
