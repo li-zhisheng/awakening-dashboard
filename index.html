@@ -565,7 +565,8 @@
   <label class="quote-indicator" id="quote-trend-wrap" hidden>
     <input type="checkbox" id="quote-trend" checked> 显示 V2 多空信号
   </label>
-  <div id="quote-chart" class="quote-chart" role="img" aria-label="分时价格走势图" hidden></div>
+  <div id="quote-chart" class="quote-chart" role="button" tabindex="0"
+    aria-label="行情图，日K模式下点击可查看对应分时" hidden></div>
   <p id="quote-status" class="quote-status" role="status" aria-live="polite">正在读取行情…</p>
   <section class="trend-review" id="quote-trend-review" hidden aria-label="同花顺多空人工核对">
     <div class="trend-review-head">
@@ -1339,6 +1340,7 @@ function drawMinuteQuote(q){
     return;
   }
   drawQuoteHeader(q);
+  quoteEl('chart').style.cursor='default';
   const values=q.points.filter(v=>v!==null);
   quoteEl('chart').hidden=!values.length;
   if(!values.length){
@@ -1494,6 +1496,7 @@ function drawDailyKline(data){
     stamp:last.date.replaceAll('-','')+'150000'
   });
   quoteEl('chart').hidden=false;
+  quoteEl('chart').style.cursor='pointer';
   if(!quoteChart)quoteChart=echarts.init(quoteEl('chart'));
   quoteChart.resize();
   quoteChart.setOption({
@@ -1765,6 +1768,15 @@ quoteEl('trend').onchange=e=>{
   if(quoteState.view==='daily'&&quoteState.daily)drawDailyKline(quoteState.daily);
 };
 quoteEl('trend-review-date').onchange=renderTrendReview;
+quoteEl('chart').onkeydown=e=>{
+  if(!quoteState?.daily||quoteState.view!=='daily'
+      ||!['Enter',' '].includes(e.key))return;
+  const date=quoteEl('trend-review-date').value;
+  if(!quoteState.daily.bars.some(bar=>bar.date===date))return;
+  e.preventDefault();
+  quoteState.minuteDate=date;
+  setQuoteView('minute');
+};
 quoteEl('trend-review-actions').onclick=e=>{
   const button=e.target.closest('button[data-review-label]');
   if(button)saveTrendReview(button.dataset.reviewLabel);
