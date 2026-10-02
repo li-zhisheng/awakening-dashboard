@@ -1,1 +1,1 @@
-{"schema":"awakening-stock-daily-v1","code":"001246","name":"N力勤资源","adjustment":"qfq","source":"本地已校验","through":"2026-09-30","bars":[["2026-09-30",65.0,84.85,65.0,65.09,1178852.0]],"signals":[],"signal_model":"","signal_from":""}
+{"schema":"awakening-stock-daily-v1","code":"001246","name":"N力勤资源","adjustment":"qfq","source":"本地已校验","through":"2026-09-30","prior_close":null,"bars":[["2026-09-30",65.0,84.85,65.0,65.09,1178852.0]],"signals":[],"signal_model":"","signal_from":""}
