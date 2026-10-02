@@ -1190,6 +1190,7 @@ function renderConsensus(){
 const quoteDialog=document.getElementById('quote-dialog');
 const quoteEl=id=>document.getElementById('quote-'+id);
 let quoteState=null, quoteChart=null, quoteTimer=null, quoteController=null, dailyController=null;
+let dailyChartClick=null;
 const dailyCache=new Map();
 const minuteTimes=[];
 for(const [start,end] of [[570,690],[780,900]]){
@@ -1348,6 +1349,10 @@ function drawMinuteQuote(q){
   if(!quoteChart)quoteChart=echarts.init(quoteEl('chart'));
   quoteChart.resize();
   quoteChart.off('click');
+  if(dailyChartClick){
+    quoteChart.getZr().off('click',dailyChartClick);
+    dailyChartClick=null;
+  }
   const span=Math.max(...values.map(v=>Math.abs(v-q.prev)),q.prev*.003)*1.12;
   const high=Math.max(...values), low=Math.min(...values);
   const extrema=high===low?[['高/低',high]]:[['高',high],['低',low]];
@@ -1533,14 +1538,22 @@ function drawDailyKline(data){
     ]
   },true);
   quoteChart.off('click');
-  quoteChart.on('click',params=>{
-    if(!Number.isInteger(params.dataIndex)||!bars[params.dataIndex])return;
-    const date=bars[params.dataIndex].date;
+  if(dailyChartClick)quoteChart.getZr().off('click',dailyChartClick);
+  dailyChartClick=event=>{
+    const point=[event.offsetX,event.offsetY];
+    if(!quoteChart.containPixel({gridIndex:0},point))return;
+    const raw=quoteChart.convertFromPixel({xAxisIndex:0},point);
+    const value=Array.isArray(raw)?raw[0]:raw;
+    const index=typeof value==='string'
+      ?dates.indexOf(value):Math.round(Number(value));
+    if(!Number.isInteger(index)||!bars[index])return;
+    const date=bars[index].date;
     quoteEl('trend-review-date').value=date;
     renderTrendReview();
     quoteState.minuteDate=date;
     setQuoteView('minute');
-  });
+  };
+  quoteChart.getZr().on('click',dailyChartClick);
   const first=bars[0];
   const longCount=study.marks.filter(mark=>mark.state==='long').length;
   const shortCount=study.marks.filter(mark=>mark.state==='short').length;
@@ -1728,6 +1741,7 @@ quoteDialog.addEventListener('close',()=>{
   quoteState=null;clearInterval(quoteTimer);quoteTimer=null;
   quoteController?.abort();quoteController=null;
   dailyController?.abort();dailyController=null;
+  dailyChartClick=null;
   quoteChart?.dispose();quoteChart=null;
 });
 quoteEl('close').onclick=()=>quoteDialog.close();
