@@ -1350,7 +1350,7 @@ function drawMinuteQuote(q){
   quoteChart.resize();
   quoteChart.off('click');
   if(dailyChartClick){
-    quoteChart.getZr().off('click',dailyChartClick);
+    quoteEl('chart').removeEventListener('click',dailyChartClick);
     dailyChartClick=null;
   }
   const span=Math.max(...values.map(v=>Math.abs(v-q.prev)),q.prev*.003)*1.12;
@@ -1538,9 +1538,11 @@ function drawDailyKline(data){
     ]
   },true);
   quoteChart.off('click');
-  if(dailyChartClick)quoteChart.getZr().off('click',dailyChartClick);
+  if(dailyChartClick)
+    quoteEl('chart').removeEventListener('click',dailyChartClick);
   dailyChartClick=event=>{
-    const point=[event.offsetX,event.offsetY];
+    const rect=quoteEl('chart').getBoundingClientRect();
+    const point=[event.clientX-rect.left,event.clientY-rect.top];
     if(!quoteChart.containPixel({gridIndex:0},point))return;
     const raw=quoteChart.convertFromPixel({xAxisIndex:0},point);
     const value=Array.isArray(raw)?raw[0]:raw;
@@ -1553,7 +1555,7 @@ function drawDailyKline(data){
     quoteState.minuteDate=date;
     setQuoteView('minute');
   };
-  quoteChart.getZr().on('click',dailyChartClick);
+  quoteEl('chart').addEventListener('click',dailyChartClick);
   const first=bars[0];
   const longCount=study.marks.filter(mark=>mark.state==='long').length;
   const shortCount=study.marks.filter(mark=>mark.state==='short').length;
@@ -1741,6 +1743,8 @@ quoteDialog.addEventListener('close',()=>{
   quoteState=null;clearInterval(quoteTimer);quoteTimer=null;
   quoteController?.abort();quoteController=null;
   dailyController?.abort();dailyController=null;
+  if(dailyChartClick)
+    quoteEl('chart').removeEventListener('click',dailyChartClick);
   dailyChartClick=null;
   quoteChart?.dispose();quoteChart=null;
 });
