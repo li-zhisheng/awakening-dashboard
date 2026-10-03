@@ -1292,8 +1292,14 @@ function parsePublishedDaily(payload,code){
     probability:Number(row[2])
   })).filter(mark=>Number.isInteger(mark.index)&&mark.index>=0
     &&mark.index<bars.length&&Number.isFinite(mark.probability));
+  const filteredSignals=(payload.filtered_signals||[]).map(row=>({
+    index:Number(row[0]),state:Number(row[1])===1?'long':'short',
+    probability:Number(row[2])
+  })).filter(mark=>Number.isInteger(mark.index)&&mark.index>=0
+    &&mark.index<bars.length&&Number.isFinite(mark.probability));
   const priorClose=Number(payload.prior_close);
-  return {bars,signals,adjustment:'前复权',source:payload.source||'BaoStock',
+  return {bars,signals,filteredSignals,
+    adjustment:'前复权',source:payload.source||'BaoStock',
     priorClose:Number.isFinite(priorClose)&&priorClose>0?priorClose:null,
     signalModel:payload.signal_model||'',signalFrom:payload.signal_from||'',
     signalThrough:payload.through||'',through:payload.through||bars.at(-1).date};
@@ -1303,11 +1309,13 @@ function mergeDailyKline(latest,published){
   if(!latest||latest.bars.at(-1).date<=published.bars.at(-1).date)
     return published;
   const indices=new Map(latest.bars.map((bar,index)=>[bar.date,index]));
-  const signals=(published.signals||[]).flatMap(mark=>{
+  const remap=marks=>(marks||[]).flatMap(mark=>{
     const date=published.bars[mark.index]?.date,index=indices.get(date);
     return Number.isInteger(index)?[{...mark,index}]:[];
   });
-  return {...latest,signals,signalModel:published.signalModel,
+  return {...latest,signals:remap(published.signals),
+    filteredSignals:remap(published.filteredSignals),
+    signalModel:published.signalModel,
     signalFrom:published.signalFrom,signalThrough:published.through,
     source:'腾讯在线行情 + BaoStock V2'};
 }
@@ -1321,7 +1329,9 @@ function dailyTrendStudy(data){
   const averages={5:average(5),10:average(10),20:average(20),30:average(30)};
   const marks=(data.signals||[]).map(mark=>({...mark,
     price:mark.state==='long'?bars[mark.index].low:bars[mark.index].high}));
-  return {averages,marks};
+  const filteredMarks=(data.filteredSignals||[]).map(mark=>({...mark,
+    price:mark.state==='long'?bars[mark.index].low:bars[mark.index].high}));
+  return {averages,marks,filteredMarks};
 }
 function drawQuoteHeader(q){
   const positive=q.change>0, cls=positive?'up':q.change<0?'down':'';
@@ -1477,7 +1487,7 @@ function drawDailyKline(data){
   const bars=data.bars,dates=bars.map(bar=>bar.date.slice(5));
   const study=dailyTrendStudy(data);
   const showTrend=quoteState?.trend!==false;
-  const marks=showTrend?study.marks.map(mark=>({
+  const strongMarks=showTrend?study.marks.map(mark=>({
     name:mark.state==='long'?'多':'空',
     coord:[mark.index,mark.price],
     value:mark.state==='long'?'多':'空',
@@ -1488,6 +1498,29 @@ function drawDailyKline(data){
     label:{show:true,color:'#fff',fontSize:12,fontWeight:700,formatter:mark.state==='long'?'多':'空'},
     tooltip:{formatter:`V2 ${mark.state==='long'?'多':'空'} · 保留概率 ${(mark.probability*100).toFixed(1)}%`}
   })):[];
+  const weakMarks=showTrend?study.filteredMarks.map(mark=>({
+    name:mark.state==='long'?'弱多':'弱空',
+    coord:[mark.index,mark.price],
+    value:mark.state==='long'?'弱多':'弱空',
+    symbol:'emptyCircle',
+    symbolSize:18,
+    symbolOffset:[0,mark.state==='long'?'65%':'-65%'],
+    itemStyle:{
+      color:'#101827',
+      borderColor:mark.state==='long'?'#f65d6b':'#20b97a',
+      borderWidth:2,
+      opacity:.72
+    },
+    label:{
+      show:true,
+      color:mark.state==='long'?'#fca5ad':'#6ee7b7',
+      fontSize:9,
+      fontWeight:700,
+      formatter:mark.state==='long'?'多':'空'
+    },
+    tooltip:{formatter:`原始${mark.state==='long'?'多':'空'}交叉 · 未通过V2过滤 · 概率 ${(mark.probability*100).toFixed(1)}%`}
+  })):[];
+  const marks=[...strongMarks,...weakMarks];
   const last=bars.at(-1),previous=bars.at(-2)||last;
   drawQuoteHeader({
     price:last.close,prev:previous.close,
@@ -1562,10 +1595,13 @@ function drawDailyKline(data){
   const first=bars[0];
   const longCount=study.marks.filter(mark=>mark.state==='long').length;
   const shortCount=study.marks.filter(mark=>mark.state==='short').length;
+  const weakLong=study.filteredMarks.filter(mark=>mark.state==='long').length;
+  const weakShort=study.filteredMarks.filter(mark=>mark.state==='short').length;
   quoteEl('chart').setAttribute('aria-label',`${first.date}至${last.date} ${data.adjustment}日K走势图`);
   const latestFormula=formulaSignalAt(data,last.date);
   const signalStatus=data.signalModel
     ?`V2收盘信号 多${longCount}/空${shortCount}`
+      +` · 弱转换 多${weakLong}/空${weakShort}`
       +` · 最新日已计算：${latestFormula===null?'不可用':reviewLabel(latestFormula)}`
       +(data.signalThrough&&data.signalThrough<last.date
         ?`（截至${data.signalThrough}）`:'')
