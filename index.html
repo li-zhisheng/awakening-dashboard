@@ -496,6 +496,7 @@
   .stock-item button{color:#bfe8ff;font:inherit;font-weight:600;border:0;background:none;cursor:pointer;text-align:left}
   .stock-item small{color:var(--sub);font-size:11px;margin-left:8px}
   .stock-sources{font-size:12px;color:var(--sub);line-height:1.8;margin-top:6px;overflow-wrap:anywhere}
+  .stock-live{font-weight:700}.stock-live.long{color:#f87171}.stock-live.short{color:#34d399}
   .explorer-more{margin-top:12px}
   #realreturns,#consensus-wrap,#selection-workspace,#research{scroll-margin-top:16px}
   .consensus-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
@@ -1319,6 +1320,43 @@ function mergeDailyKline(latest,published){
     signalFrom:published.signalFrom,signalThrough:published.through,
     source:'腾讯在线行情 + BaoStock V2'};
 }
+function trendLiveFor(code){
+  const live=DATA?.trend_live, item=live?.stocks?.[code];
+  if(live?.schema!=='awakening-ths-trend-live-v1'||!item?.bar
+      ||item.bar.date!==live.date)return null;
+  return {...item,mode:live.mode,generatedAt:live.generated_at};
+}
+function mergeTrendLive(data,code){
+  const live=trendLiveFor(code);
+  if(!data||!live)return data;
+  const raw=live.bar, values=['open','high','low','close','volume'].map(key=>Number(raw[key]));
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(raw.date)||!values.every(Number.isFinite)
+      ||Math.min(...values.slice(0,4))<=0||values[4]<0
+      ||values[1]<Math.max(values[0],values[3])
+      ||values[2]>Math.min(values[0],values[3]))return data;
+  const bar={date:raw.date,open:values[0],high:values[1],low:values[2],
+    close:values[3],volume:values[4]};
+  const bars=data.bars.map(item=>({...item}));
+  const existing=bars.findIndex(item=>item.date===bar.date);
+  if(existing>=0)bars[existing]=bar;
+  else if(!bars.length||bars.at(-1).date<bar.date)bars.push(bar);
+  else return data;
+  const index=bars.findIndex(item=>item.date===bar.date);
+  const withoutToday=marks=>(marks||[]).filter(mark=>
+    data.bars[mark.index]?.date!==bar.date).map(mark=>({...mark}));
+  const signals=withoutToday(data.signals);
+  const filteredSignals=withoutToday(data.filteredSignals);
+  const direction=live.candidate_signal==='LONG'?'long'
+    :live.candidate_signal==='SHORT'?'short':'';
+  const mark=direction?{
+    index,state:direction,probability:Number(live.retention_probability),
+    intraday:true
+  }:null;
+  if(mark&&(live.state==='confirmed'))signals.push(mark);
+  else if(mark)filteredSignals.push(mark);
+  return {...data,bars,signals,filteredSignals,live,
+    source:(data.source?data.source+' + ':'')+(live.mode==='frozen'?'V2收盘冻结':'V2盘中动态')};
+}
 function dailyTrendStudy(data){
   const bars=data.bars;
   const closes=bars.map(bar=>bar.close);
@@ -1522,11 +1560,14 @@ function drawDailyKline(data){
   })):[];
   const marks=[...strongMarks,...weakMarks];
   const last=bars.at(-1),previous=bars.at(-2)||last;
+  const liveStamp=data.live?.bar?.as_of
+    ?String(data.live.bar.as_of).replace(/\D/g,'').slice(0,14)
+    :last.date.replaceAll('-','')+'150000';
   drawQuoteHeader({
     price:last.close,prev:previous.close,
     change:last.close-previous.close,
     percent:(last.close/previous.close-1)*100,
-    stamp:last.date.replaceAll('-','')+'150000'
+    stamp:liveStamp
   });
   quoteEl('chart').hidden=false;
   quoteEl('chart').style.cursor='pointer';
@@ -1606,8 +1647,13 @@ function drawDailyKline(data){
       +(data.signalThrough&&data.signalThrough<last.date
         ?`（截至${data.signalThrough}）`:'')
     :bars.length<60?`V2预热中（需60日，当前${bars.length}日）`:'V2信号不可用';
+  const liveStatus=data.live
+    ?` · ${data.live.mode==='frozen'?'收盘冻结':'盘中动态'} ${reviewLabel(data.live.candidate_signal)}`
+      +` · 保留概率 ${(Number(data.live.retention_probability)*100).toFixed(1)}%`
+      +` · ${String(data.live.bar.as_of).slice(11,19)}`
+    :'';
   quoteEl('status').textContent=`${data.source||''} · ${data.adjustment}日K · ${bars.length}个交易日 · 数据截至 ${last.date}`
-    +(showTrend?` · ${signalStatus}`:'');
+    +(showTrend?` · ${signalStatus}${liveStatus}`:'');
   renderTrendReview();
 }
 async function refreshQuote(force=false){
@@ -1685,8 +1731,8 @@ async function refreshDaily(force=false){
   if(!state||!quoteDialog.open||(document.hidden&&!force)||dailyController)return;
   const cached=dailyCache.get(state.symbol);
   if(cached&&!force){
-    state.daily=cached;
-    if(state.view==='daily')drawDailyKline(cached);
+    state.daily=mergeTrendLive(cached,state.code);
+    if(state.view==='daily')drawDailyKline(state.daily);
     return;
   }
   const controller=new AbortController();
@@ -1717,8 +1763,8 @@ async function refreshDaily(force=false){
     if(!daily)throw new Error('日K服务暂不可用');
     if(quoteState!==state||!quoteDialog.open)return;
     dailyCache.set(state.symbol,daily);
-    state.daily=daily;
-    if(state.view==='daily')drawDailyKline(daily);
+    state.daily=mergeTrendLive(daily,state.code);
+    if(state.view==='daily')drawDailyKline(state.daily);
   }catch(e){
     if(quoteState===state&&quoteDialog.open&&state.view==='daily')
       quoteEl('status').textContent=state.daily?'更新失败，保留上次日K。':'日K暂时无法读取，请点击刷新重试。';
@@ -1947,6 +1993,13 @@ async function refresh(){
       return;
     }
     DATA=next;loadError=false;
+    if(quoteState?.daily&&quoteDialog.open){
+      const base=dailyCache.get(quoteState.symbol);
+      if(base){
+        quoteState.daily=mergeTrendLive(base,quoteState.code);
+        if(quoteState.view==='daily')drawDailyKline(quoteState.daily);
+      }
+    }
     try{
       localStorage.setItem(_CACHE_KEY,sig);
       localStorage.removeItem(_LEGACY_CACHE_KEY);
@@ -2041,11 +2094,20 @@ function renderExplorerRows(){
     :stockCatalogError?'全市场目录读取失败，当前仅显示本批入选股票':'正在读取全市场证券目录';
   document.getElementById('stock-meta').textContent=
     `${scope} · 匹配 ${explorerRows.length}只 / 显示 ${shown.length}只 · 推荐来源跟随批次 ${explorerCohort||'暂无'}。`;
-  document.getElementById('stock-list').innerHTML=shown.length?shown.map(s=>`
+  document.getElementById('stock-list').innerHTML=shown.length?shown.map(s=>{
+    const live=trendLiveFor(s.code);
+    const direction=live?.candidate_signal==='LONG'?'long'
+      :live?.candidate_signal==='SHORT'?'short':'';
+    const liveLabel=live&&direction
+      ?`<span class="stock-live ${direction}">${live.state==='confirmed'?'强':'弱'}${direction==='long'?'多':'空'} ${(Number(live.retention_probability)*100).toFixed(1)}% · ${live.mode==='frozen'?'收盘冻结':'盘中'}</span>`
+      :live?`实时无交叉 · ${live.mode==='frozen'?'收盘冻结':'盘中'}`:'';
+    return `
     <article class="stock-item"><button data-quote-code="${esc(s.code)}" data-quote-name="${esc(s.name)}" data-quote-view="daily">${esc(s.name)}</button><small>${esc(s.code)}</small>
     <p class="stock-sources">${s.sources.length
       ?s.sources.map(x=>`${esc(x.name)} #${x.rank}`).join(' · ')
-      :(s.signal?'V2日K已就绪':s.daily?'日K已就绪 · V2信号待积累':'日K在线读取 · V2信号待补齐')}</p></article>`).join(''):
+      :(s.signal?'V2日K已就绪':s.daily?'日K已就绪 · V2信号待积累':'日K在线读取 · V2信号待补齐')}
+      ${liveLabel?`<br>${liveLabel}`:''}</p></article>`;
+  }).join(''):
     '<p class="empty-row">当前筛选没有匹配股票。可清空关键词或切换批次、来源。</p>';
   document.getElementById('stock-more').hidden=shown.length>=explorerRows.length;
   document.getElementById('stock-export').disabled=!explorerRows.length;
