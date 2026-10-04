@@ -190,7 +190,7 @@ const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pct=v=>v==null?'—':`${v>=0?'+':''}${(v*100).toFixed(2)}%`;
 const cls=v=>v==null?'':v>=0?'pos':'neg';
-const money=v=>v==null?'—':`${v>=0?'+':''}¥${Math.abs(v).toLocaleString('zh-CN',{maximumFractionDigits:0})}`;
+const money=v=>v==null?'—':`${v>0?'+':v<0?'−':''}¥${Math.abs(v).toLocaleString('zh-CN',{maximumFractionDigits:0})}`;
 const dateInput=v=>v&&v.length===8?`${v.slice(0,4)}-${v.slice(4,6)}-${v.slice(6)}`:'';
 const compactDate=v=>(v||'').replaceAll('-','');
 const shortHash=v=>v?String(v).slice(0,10):'未冻结';
