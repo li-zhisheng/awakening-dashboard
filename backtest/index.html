@@ -45,6 +45,8 @@
     .metric b{display:block;font-size:24px;margin-top:5px;font-variant-numeric:tabular-nums}
     .returns-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
     .returns-grid .metric b{font-size:21px}
+    .trend-metrics{grid-template-columns:repeat(6,minmax(0,1fr))}
+    .trend-note{color:var(--muted);font-size:12px;line-height:1.8;margin:8px 0 12px}
     .tabs{display:flex;gap:4px;margin:18px 0 10px}
     .tabs button{border-color:transparent;background:transparent;color:var(--muted)}
     .tabs button.active{color:var(--text);background:#253137;border-color:#3b4a51}
@@ -72,12 +74,14 @@
       .top,.toolbar-inner,main{padding-left:14px;padding-right:14px}
       .top{align-items:flex-start}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
       .returns-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+      .trend-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
       .grid{grid-template-columns:1fr}.chart{height:280px}
       input,select{min-width:130px}.status{align-items:flex-start;flex-direction:column}
     }
     @media(max-width:480px){
       h1{font-size:20px}.metrics{grid-template-columns:1fr 1fr}
       .returns-grid{grid-template-columns:1fr 1fr}
+      .trend-metrics{grid-template-columns:1fr 1fr}
       .metric b{font-size:20px}.toolbar-inner>*{flex:1 1 130px}
       button{width:100%}
     }
@@ -120,6 +124,28 @@
     <div class="metric"><span>模拟本金</span><b id="m-capital">—</b></div>
     <div class="metric"><span>往返成本</span><b id="m-cost">15 bp</b></div>
   </div>
+  <section class="section" id="trend-backtest" hidden>
+    <div class="section-head">
+      <h2>全市场多空择时 · 月度收益</h2>
+      <div class="legend">强多当日收盘买入，强空当日收盘卖出；月末持仓按收盘估值</div>
+    </div>
+    <p class="trend-note" id="trend-note"></p>
+    <div class="metrics trend-metrics">
+      <div class="metric"><span>年度累计净收益</span><b id="trend-return">—</b></div>
+      <div class="metric"><span>模拟累计盈亏</span><b id="trend-profit">—</b></div>
+      <div class="metric"><span>覆盖股票</span><b id="trend-universe">—</b></div>
+      <div class="metric"><span>已平仓交易</span><b id="trend-trades">—</b></div>
+      <div class="metric"><span>已平仓胜率</span><b id="trend-win">—</b></div>
+      <div class="metric"><span>月末最大回撤</span><b id="trend-drawdown">—</b></div>
+    </div>
+    <div class="grid">
+      <div class="pane"><div id="trend-chart" class="chart"></div></div>
+      <div class="pane table-wrap"><table>
+        <thead><tr><th>月份</th><th>月净收益</th><th>月盈亏</th><th>累计净收益</th><th>买入</th><th>卖出</th><th>月末持仓</th></tr></thead>
+        <tbody id="trend-months"></tbody>
+      </table></div>
+    </div>
+  </section>
   <div class="tabs">
     <button data-layer="technical" class="active">技术层</button>
     <button data-layer="confirmed">三层确认</button>
@@ -159,7 +185,7 @@
   <div class="warnings" id="warnings"></div>
 </main>
 <script>
-let DATA=null,LAYER='technical',MODEL='',MONTH='',CHART=null;
+let DATA=null,LAYER='technical',MODEL='',MONTH='',CHART=null,TREND_CHART=null;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pct=v=>v==null?'—':`${v>=0?'+':''}${(v*100).toFixed(2)}%`;
@@ -212,6 +238,7 @@ function render(){
   $('m-full').textContent=coverage.full_three_stage_days||0;
   $('m-capital').textContent=DATA.initial_capital?`¥${(+DATA.initial_capital).toLocaleString('zh-CN',{maximumFractionDigits:0})}`:'—';
   $('m-cost').textContent=`${DATA.cost_bps??15} bp`;
+  renderTrendBacktest();
   const hasRuns=(DATA.runs||[]).length>0;
   $('state').textContent=hasRuns?'结果已加载':'历史数据待接入';
   $('state').className=hasRuns?'ok':'warn';
@@ -229,6 +256,57 @@ function render(){
   renderMonthlyDetail(node);renderRuns();renderChart();
   $('warnings').innerHTML=(DATA.warnings||[]).map(w=>`<div>· ${esc(w)}</div>`).join('');
   $('run').disabled=!DATA.can_run;
+}
+function renderTrendBacktest(){
+  const value=DATA.trend_backtest,section=$('trend-backtest');
+  if(value?.schema!=='awakening-ths-trend-monthly-backtest-v1'
+      ||!Array.isArray(value.monthly)||!value.monthly.length){
+    section.hidden=true;return;
+  }
+  section.hidden=false;
+  const summary=value.summary||{},costs=value.costs||{};
+  $('trend-return').className=cls(summary.annual_return);
+  $('trend-return').textContent=pct(summary.annual_return);
+  $('trend-profit').className=cls(summary.annual_profit_cny);
+  $('trend-profit').textContent=money(summary.annual_profit_cny);
+  $('trend-universe').textContent=(value.universe_count||0).toLocaleString('zh-CN');
+  $('trend-trades').textContent=(summary.closed_trades||0).toLocaleString('zh-CN');
+  $('trend-win').textContent=summary.win_rate==null?'—':(summary.win_rate*100).toFixed(1)+'%';
+  $('trend-drawdown').className=cls(summary.max_month_end_drawdown);
+  $('trend-drawdown').textContent=pct(summary.max_month_end_drawdown);
+  $('trend-note').textContent=
+    `${value.range?.from||'—'} 至 ${value.range?.through||'—'} · 当前主板目录 ${value.universe_count||0} 只`
+    +` · 指标预热完成 ${value.signal_ready_count||0} 只`
+    +` · 买入 ${costs.buy_bps??0}bp / 卖出 ${costs.sell_bps??0}bp`
+    +` · 100万元等权资金槽模拟。同日收盘成交使用完整收盘K线，属于偏乐观研究口径。`;
+  $('trend-months').innerHTML=value.monthly.map(row=>`<tr>
+    <td>${esc(row.month)}</td>
+    <td class="${cls(row.return)}">${pct(row.return)}</td>
+    <td class="${cls(row.profit_cny)}">${money(row.profit_cny)}</td>
+    <td class="${cls(row.cumulative_return)}">${pct(row.cumulative_return)}</td>
+    <td>${Number(row.buys||0).toLocaleString('zh-CN')}</td>
+    <td>${Number(row.sells||0).toLocaleString('zh-CN')}</td>
+    <td>${Number(row.holdings_end||0).toLocaleString('zh-CN')}</td>
+  </tr>`).join('');
+  if(!TREND_CHART)TREND_CHART=echarts.init($('trend-chart'));
+  TREND_CHART.setOption({
+    backgroundColor:'transparent',animation:false,
+    title:{text:`${value.year}年全市场多空策略月度净收益`,left:14,top:12,
+      textStyle:{color:'#edf2f4',fontSize:14,fontWeight:600}},
+    grid:{left:52,right:18,top:54,bottom:42},
+    tooltip:{trigger:'axis',formatter:params=>{
+      const row=value.monthly[params[0]?.dataIndex];
+      return row?`${row.month}<br>月净收益 ${pct(row.return)}<br>月盈亏 ${money(row.profit_cny)}<br>累计 ${pct(row.cumulative_return)}<br>买入 ${row.buys} · 卖出 ${row.sells} · 持仓 ${row.holdings_end}`:'';
+    }},
+    xAxis:{type:'category',data:value.monthly.map(row=>row.month.slice(5)+'月'),
+      axisLabel:{color:'#93a2aa'},axisLine:{lineStyle:{color:'#39464d'}}},
+    yAxis:{type:'value',axisLabel:{color:'#93a2aa',formatter:'{value}%'},
+      splitLine:{lineStyle:{color:'#263138'}}},
+    series:[{type:'bar',barMaxWidth:34,data:value.monthly.map(row=>({
+      value:+(row.return*100).toFixed(3),
+      itemStyle:{color:row.return>=0?'#ef6a6a':'#45c486'}
+    }))}]
+  },true);
 }
 function renderMonthSummary(node){
   $('month-summary').innerHTML=variants.map(([h,mode,label])=>{
@@ -327,7 +405,7 @@ $('start').onchange=e=>selectDateMonth(e.target);
 $('end').onchange=e=>selectDateMonth(e.target);
 $('model').onchange=e=>{MODEL=e.target.value;MONTH='';render()};
 $('month').onchange=e=>{MONTH=e.target.value;renderMonthSummary(DATA.results?.[LAYER]?.[MODEL])};
-$('run').onclick=run;$('refresh').onclick=load;window.onresize=()=>CHART?.resize();load();
+$('run').onclick=run;$('refresh').onclick=load;window.onresize=()=>{CHART?.resize();TREND_CHART?.resize()};load();
 </script>
 </body>
 </html>
