@@ -47,6 +47,14 @@
     .returns-grid .metric b{font-size:21px}
     .trend-metrics{grid-template-columns:repeat(6,minmax(0,1fr))}
     .trend-note{color:var(--muted);font-size:12px;line-height:1.8;margin:8px 0 12px}
+    .trend-stock-controls{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin:18px 0 10px}
+    .trend-stock-controls label:first-child{flex:1;min-width:220px}
+    .trend-stock-controls input{width:100%}
+    .trend-stock-meta{color:var(--muted);font-size:12px;margin-bottom:10px}
+    .trend-stock-table th:first-child,.trend-stock-table td:first-child{
+      position:sticky;left:0;background:#1b2328;z-index:2}
+    .trend-stock-table td:first-child b{display:block;color:var(--text)}
+    .trend-stock-table td:first-child small{color:var(--muted)}
     .tabs{display:flex;gap:4px;margin:18px 0 10px}
     .tabs button{border-color:transparent;background:transparent;color:var(--muted)}
     .tabs button.active{color:var(--text);background:#253137;border-color:#3b4a51}
@@ -145,6 +153,24 @@
         <tbody id="trend-months"></tbody>
       </table></div>
     </div>
+    <div class="section-head" style="margin-top:20px">
+      <h2>逐只股票月收益矩阵</h2>
+      <div class="legend">每只股票独立从现金开始；红色盈利，绿色亏损</div>
+    </div>
+    <div class="trend-stock-controls">
+      <label>股票代码 / 名称<input id="trend-stock-search" type="search" placeholder="例如 600017 或 日照港"></label>
+      <label>排序<select id="trend-stock-sort">
+        <option value="code">按代码</option>
+        <option value="annual-desc">年度收益从高到低</option>
+        <option value="annual-asc">年度收益从低到高</option>
+      </select></label>
+      <button id="trend-stock-more">再显示100只</button>
+    </div>
+    <div class="trend-stock-meta" id="trend-stock-meta"></div>
+    <div class="pane table-wrap"><table class="trend-stock-table">
+      <thead id="trend-stock-head"></thead>
+      <tbody id="trend-stock-rows"></tbody>
+    </table></div>
   </section>
   <div class="tabs">
     <button data-layer="technical" class="active">技术层</button>
@@ -186,6 +212,7 @@
 </main>
 <script>
 let DATA=null,LAYER='technical',MODEL='',MONTH='',CHART=null,TREND_CHART=null;
+let TREND_STOCK_LIMIT=100;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pct=v=>v==null?'—':`${v>=0?'+':''}${(v*100).toFixed(2)}%`;
@@ -288,6 +315,7 @@ function renderTrendBacktest(){
     <td>${Number(row.sells||0).toLocaleString('zh-CN')}</td>
     <td>${Number(row.holdings_end||0).toLocaleString('zh-CN')}</td>
   </tr>`).join('');
+  renderTrendStocks(value);
   if(!TREND_CHART)TREND_CHART=echarts.init($('trend-chart'));
   TREND_CHART.setOption({
     backgroundColor:'transparent',animation:false,
@@ -307,6 +335,39 @@ function renderTrendBacktest(){
       itemStyle:{color:row.return>=0?'#ef6a6a':'#45c486'}
     }))}]
   },true);
+}
+function renderTrendStocks(value=DATA?.trend_backtest){
+  if(!value||!Array.isArray(value.stocks))return;
+  const query=$('trend-stock-search').value.trim().toLowerCase();
+  const sort=$('trend-stock-sort').value;
+  const months=value.monthly.map(row=>row.month);
+  const rows=value.stocks.filter(stock=>
+    !query||stock.code.includes(query)||String(stock.name||'').toLowerCase().includes(query));
+  rows.sort((a,b)=>sort==='annual-desc'
+    ?b.annual_return-a.annual_return||a.code.localeCompare(b.code)
+    :sort==='annual-asc'
+      ?a.annual_return-b.annual_return||a.code.localeCompare(b.code)
+      :a.code.localeCompare(b.code));
+  const shown=rows.slice(0,TREND_STOCK_LIMIT);
+  $('trend-stock-head').innerHTML=`<tr><th>股票</th><th>年度累计</th>${months.map(
+    month=>`<th>${esc(month.slice(5))}月</th>`).join('')}<th>买/卖</th><th>期末</th></tr>`;
+  $('trend-stock-rows').innerHTML=shown.length?shown.map(stock=>{
+    const lookup=Object.fromEntries((stock.monthly||[]).map(row=>[row.month,row]));
+    const cells=months.map(month=>{
+      const row=lookup[month];
+      if(!row)return '<td>—</td>';
+      const alpha=Math.min(.24,.04+Math.abs(row.return)*1.6);
+      const bg=row.return>=0?`rgba(239,106,106,${alpha})`:`rgba(69,196,134,${alpha})`;
+      return `<td class="${cls(row.return)}" style="background:${bg}" title="累计 ${pct(row.cumulative_return)} · 买 ${row.buys} · 卖 ${row.sells} · ${row.holding_end?'持仓':'现金'}">${pct(row.return)}</td>`;
+    }).join('');
+    return `<tr><td><b>${esc(stock.name)}</b><small>${esc(stock.code)}</small></td>`
+      +`<td class="${cls(stock.annual_return)}">${pct(stock.annual_return)}</td>`
+      +cells+`<td>${stock.buy_count}/${stock.sell_count}</td>`
+      +`<td>${stock.holding_end?'持仓':'现金'}</td></tr>`;
+  }).join(''):'<tr><td class="empty">没有匹配股票</td></tr>';
+  $('trend-stock-meta').textContent=
+    `匹配 ${rows.length.toLocaleString('zh-CN')} 只 · 当前显示 ${shown.length.toLocaleString('zh-CN')} 只 · 共 ${value.stocks.length.toLocaleString('zh-CN')} 只`;
+  $('trend-stock-more').hidden=shown.length>=rows.length;
 }
 function renderMonthSummary(node){
   $('month-summary').innerHTML=variants.map(([h,mode,label])=>{
@@ -405,6 +466,9 @@ $('start').onchange=e=>selectDateMonth(e.target);
 $('end').onchange=e=>selectDateMonth(e.target);
 $('model').onchange=e=>{MODEL=e.target.value;MONTH='';render()};
 $('month').onchange=e=>{MONTH=e.target.value;renderMonthSummary(DATA.results?.[LAYER]?.[MODEL])};
+$('trend-stock-search').oninput=()=>{TREND_STOCK_LIMIT=100;renderTrendStocks()};
+$('trend-stock-sort').onchange=()=>{TREND_STOCK_LIMIT=100;renderTrendStocks()};
+$('trend-stock-more').onclick=()=>{TREND_STOCK_LIMIT+=100;renderTrendStocks()};
 $('run').onclick=run;$('refresh').onclick=load;window.onresize=()=>{CHART?.resize();TREND_CHART?.resize()};load();
 </script>
 </body>
