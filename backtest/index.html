@@ -135,7 +135,7 @@
   <section class="section" id="trend-backtest" hidden>
     <div class="section-head">
       <h2>全市场多空择时 · 月度收益</h2>
-      <div class="legend">强多当日收盘买入，强空当日收盘卖出；月末持仓按收盘估值</div>
+      <div class="legend">强多/强空信号后下一交易日开盘成交；月末持仓按收盘估值</div>
     </div>
     <p class="trend-note" id="trend-note"></p>
     <div class="metrics trend-metrics">
@@ -163,6 +163,10 @@
         <option value="code">按代码</option>
         <option value="annual-desc">年度收益从高到低</option>
         <option value="annual-asc">年度收益从低到高</option>
+      </select></label>
+      <label>月收益口径<select id="trend-stock-return-mode">
+        <option value="realized">平仓归属（默认）</option>
+        <option value="mtm">月末净值</option>
       </select></label>
       <button id="trend-stock-more">再显示100只</button>
     </div>
@@ -305,7 +309,7 @@ function renderTrendBacktest(){
     `${value.range?.from||'—'} 至 ${value.range?.through||'—'} · 当前主板目录 ${value.universe_count||0} 只`
     +` · 指标预热完成 ${value.signal_ready_count||0} 只`
     +` · 买入 ${costs.buy_bps??0}bp / 卖出 ${costs.sell_bps??0}bp`
-    +` · 100万元等权资金槽模拟。同日收盘成交使用完整收盘K线，属于偏乐观研究口径。`;
+    +` · 100万元等权资金槽模拟。信号在收盘后确认，统一按下一交易日开盘成交。`;
   $('trend-months').innerHTML=value.monthly.map(row=>`<tr>
     <td>${esc(row.month)}</td>
     <td class="${cls(row.return)}">${pct(row.return)}</td>
@@ -340,6 +344,7 @@ function renderTrendStocks(value=DATA?.trend_backtest){
   if(!value||!Array.isArray(value.stocks))return;
   const query=$('trend-stock-search').value.trim().toLowerCase();
   const sort=$('trend-stock-sort').value;
+  const returnMode=$('trend-stock-return-mode').value;
   const months=value.monthly.map(row=>row.month);
   const rows=value.stocks.filter(stock=>
     !query||stock.code.includes(query)||String(stock.name||'').toLowerCase().includes(query));
@@ -356,9 +361,14 @@ function renderTrendStocks(value=DATA?.trend_backtest){
     const cells=months.map(month=>{
       const row=lookup[month];
       if(!row)return '<td>—</td>';
-      const alpha=Math.min(.24,.04+Math.abs(row.return)*1.6);
-      const bg=row.return>=0?`rgba(239,106,106,${alpha})`:`rgba(69,196,134,${alpha})`;
-      return `<td class="${cls(row.return)}" style="background:${bg}" title="累计 ${pct(row.cumulative_return)} · 买 ${row.buys} · 卖 ${row.sells} · ${row.holding_end?'持仓':'现金'}">${pct(row.return)}</td>`;
+      const monthReturn=returnMode==='realized'
+        ?row.realized_return:row.return;
+      const alpha=Math.min(.24,.04+Math.abs(monthReturn)*1.6);
+      const bg=monthReturn>=0?`rgba(239,106,106,${alpha})`:`rgba(69,196,134,${alpha})`;
+      const detail=returnMode==='realized'
+        ?`本月平仓 ${row.realized_trades} 笔`
+        :`累计 ${pct(row.cumulative_return)} · 月末${row.holding_end?'持仓':'现金'}`;
+      return `<td class="${cls(monthReturn)}" style="background:${bg}" title="${detail} · 买 ${row.buys} · 卖 ${row.sells}">${pct(monthReturn)}</td>`;
     }).join('');
     return `<tr><td><b>${esc(stock.name)}</b><small>${esc(stock.code)}</small></td>`
       +`<td class="${cls(stock.annual_return)}">${pct(stock.annual_return)}</td>`
@@ -367,6 +377,9 @@ function renderTrendStocks(value=DATA?.trend_backtest){
   }).join(''):'<tr><td class="empty">没有匹配股票</td></tr>';
   $('trend-stock-meta').textContent=
     `匹配 ${rows.length.toLocaleString('zh-CN')} 只 · 当前显示 ${shown.length.toLocaleString('zh-CN')} 只 · 共 ${value.stocks.length.toLocaleString('zh-CN')} 只`;
+  $('trend-stock-meta').textContent+=returnMode==='realized'
+    ?' · 平仓归属：整笔交易收益计入卖出月份'
+    :' · 月末净值：跨月持仓按各月末市值切分';
   $('trend-stock-more').hidden=shown.length>=rows.length;
 }
 function renderMonthSummary(node){
@@ -468,6 +481,7 @@ $('model').onchange=e=>{MODEL=e.target.value;MONTH='';render()};
 $('month').onchange=e=>{MONTH=e.target.value;renderMonthSummary(DATA.results?.[LAYER]?.[MODEL])};
 $('trend-stock-search').oninput=()=>{TREND_STOCK_LIMIT=100;renderTrendStocks()};
 $('trend-stock-sort').onchange=()=>{TREND_STOCK_LIMIT=100;renderTrendStocks()};
+$('trend-stock-return-mode').onchange=()=>renderTrendStocks();
 $('trend-stock-more').onclick=()=>{TREND_STOCK_LIMIT+=100;renderTrendStocks()};
 $('run').onclick=run;$('refresh').onclick=load;window.onresize=()=>{CHART?.resize();TREND_CHART?.resize()};load();
 </script>
