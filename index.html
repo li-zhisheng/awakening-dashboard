@@ -509,6 +509,7 @@
 </style>
 </head>
 <body>
+<script src="trend-paper.js?v=20261006-1" defer></script>
 
 <div class="top">
   <div class="title">
@@ -2099,7 +2100,7 @@ function renderExplorerRows(){
     const direction=live?.candidate_signal==='LONG'?'long'
       :live?.candidate_signal==='SHORT'?'short':'';
     const liveLabel=live&&direction
-      ?`<span class="stock-live ${direction}">${live.state==='confirmed'?'强':'弱'}${direction==='long'?'多':'空'} ${(Number(live.retention_probability)*100).toFixed(1)}% · ${live.mode==='frozen'?'收盘冻结':'盘中'}</span>`
+      ?`<span class="stock-live ${direction}">${(live.strength|| (live.retention_probability>=live.formal_threshold?'strong':'weak'))==='strong'?'强':'弱'}${direction==='long'?'多':'空'} ${(Number(live.retention_probability)*100).toFixed(1)}% · ${live.mode==='frozen'?'收盘冻结':'盘中'}</span>`
       :live?`实时无交叉 · ${live.mode==='frozen'?'收盘冻结':'盘中'}`:'';
     return `
     <article class="stock-item"><button data-quote-code="${esc(s.code)}" data-quote-name="${esc(s.name)}" data-quote-view="daily">${esc(s.name)}</button><small>${esc(s.code)}</small>
