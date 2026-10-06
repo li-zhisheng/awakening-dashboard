@@ -135,7 +135,7 @@
   <section class="section" id="trend-backtest" hidden>
     <div class="section-head">
       <h2>全市场多空择时 · 月度收益</h2>
-      <div class="legend">强多/强空信号后下一交易日开盘成交；月末持仓按收盘估值</div>
+      <div class="legend">强多/强空当日首次满足完整公式的5分钟价成交；月末持仓按收盘估值</div>
     </div>
     <p class="trend-note" id="trend-note"></p>
     <div class="metrics trend-metrics">
@@ -291,6 +291,7 @@ function render(){
 function renderTrendBacktest(){
   const value=DATA.trend_backtest,section=$('trend-backtest');
   if(value?.schema!=='awakening-ths-trend-monthly-backtest-v1'
+      ||value?.return_contract!=='strong-marker-first-5m-formal-trigger-v3'
       ||!Array.isArray(value.monthly)||!value.monthly.length){
     section.hidden=true;return;
   }
@@ -309,7 +310,7 @@ function renderTrendBacktest(){
     `${value.range?.from||'—'} 至 ${value.range?.through||'—'} · 当前主板目录 ${value.universe_count||0} 只`
     +` · 指标预热完成 ${value.signal_ready_count||0} 只`
     +` · 买入 ${costs.buy_bps??0}bp / 卖出 ${costs.sell_bps??0}bp`
-    +` · 100万元等权资金槽模拟。信号在收盘后确认，统一按下一交易日开盘成交。`;
+    +` · 100万元等权资金槽模拟。成交价来自BaoStock 5分钟重放的首次正式公式触发点，不允许缺失回退。`;
   $('trend-months').innerHTML=value.monthly.map(row=>`<tr>
     <td>${esc(row.month)}</td>
     <td class="${cls(row.return)}">${pct(row.return)}</td>
@@ -368,7 +369,11 @@ function renderTrendStocks(value=DATA?.trend_backtest){
       const detail=returnMode==='realized'
         ?`本月平仓 ${row.realized_trades} 笔`
         :`累计 ${pct(row.cumulative_return)} · 月末${row.holding_end?'持仓':'现金'}`;
-      return `<td class="${cls(monthReturn)}" style="background:${bg}" title="${detail} · 买 ${row.buys} · 卖 ${row.sells}">${pct(monthReturn)}</td>`;
+      const triggers=(stock.executions||[])
+        .filter(item=>String(item[0]||'').startsWith(month))
+        .map(item=>`${item[0]} ${String(item[1]).slice(0,2)}:${String(item[1]).slice(2)} ${item[2]===1?'强多买入':'强空卖出'} ¥${Number(item[3]).toFixed(3)} ${item[4]==='daily_close_reconciled'?'收盘日K对账':'5分钟重放'}`);
+      const audit=triggers.length?` · ${triggers.join('；')}`:' · 本月无公式触发';
+      return `<td class="${cls(monthReturn)}" style="background:${bg}" title="${esc(detail+` · 买 ${row.buys} · 卖 ${row.sells}`+audit)}">${pct(monthReturn)}</td>`;
     }).join('');
     return `<tr><td><b>${esc(stock.name)}</b><small>${esc(stock.code)}</small></td>`
       +`<td class="${cls(stock.annual_return)}">${pct(stock.annual_return)}</td>`
