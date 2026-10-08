@@ -80,13 +80,16 @@
     .segmented button:last-child{border-right:0}
     .segmented button.active{background:#245b61;color:white}
     .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:6px}
-    table{width:100%;border-collapse:collapse;min-width:920px}
+    table{width:100%;border-collapse:collapse;min-width:1420px}
     th,td{padding:10px 12px;border-bottom:1px solid #283238;text-align:right;
       white-space:nowrap;font-variant-numeric:tabular-nums}
     th{position:sticky;top:0;background:#172024;color:var(--muted);font-size:12px}
     th:nth-child(2),th:nth-child(3),th:nth-child(4),
     td:nth-child(2),td:nth-child(3),td:nth-child(4){text-align:left}
     tbody tr:last-child td{border-bottom:0}
+    tbody tr.vanished{background:rgba(228,185,92,.07)}
+    .badge{display:inline-block;border:1px solid #806c3d;border-radius:4px;
+      color:var(--amber);padding:2px 6px;font-size:11px}
     .stock-link{border:0;background:none;padding:0;color:#9edce0;text-decoration:underline;
       text-underline-offset:3px}
     .pagination{display:flex;align-items:center;justify-content:flex-end;
@@ -102,7 +105,9 @@
       background:#101719;color:var(--text);padding:18px}
     dialog::backdrop{background:rgba(0,0,0,.74)}
     .dialog-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
-    .dialog-head h2{font-size:21px}.dialog-head p{color:var(--muted);margin-top:3px}
+    .dialog-head h2{font-size:21px}
+    .stock-meta{color:var(--muted);margin-top:5px;font-size:12px;line-height:1.7}
+    .stock-meta strong{color:var(--text);font-weight:600}
     .dialog-tabs{margin:14px 0;display:flex;gap:4px}
     .dialog-tabs button{border:1px solid var(--line);border-radius:5px;
       background:var(--surface2);color:var(--muted);padding:7px 14px}
@@ -200,7 +205,7 @@
 
   <dialog id="stock-dialog" aria-labelledby="stock-title">
     <div class="dialog-head">
-      <div><h2 id="stock-title">股票行情</h2><p id="stock-code"></p></div>
+      <div><h2 id="stock-title">股票行情</h2><div id="stock-code" class="stock-meta"></div></div>
       <button id="stock-close" class="icon-btn" type="button" title="关闭" aria-label="关闭">×</button>
     </div>
     <div class="dialog-tabs" role="tablist" aria-label="行情周期">
@@ -268,9 +273,12 @@
           <div class="fact"><span>模型共识</span><b>${row.votes} 票 · ${(Number(row.vote_share) * 100).toFixed(0)}%</b></div>
           <div class="fact"><span>首次多头</span><b>${esc(clock(signal.quote_at))}</b></div>
           <div class="fact"><span>信号价格</span><b>${price(signal.price)}</b></div>
-          <div class="fact"><span>信号涨幅</span><b class="up">${pct(signal.change)}</b></div>
-          <div class="fact"><span>信号概率</span><b>${(Number(signal.probability) * 100).toFixed(1)}%</b></div>
-          <div class="fact"><span>行情来源</span><b>${esc(sourceName(signal.source))}</b></div>
+          <div class="fact"><span>信号时涨跌</span><b class="${Number(signal.change) >= 0 ? 'up' : 'down'}">${pct(signal.change)}</b></div>
+          <div class="fact"><span>信号至收盘</span><b class="${Number(signal.signal_to_close) >= 0 ? 'up' : 'down'}">${pct(signal.signal_to_close)}</b></div>
+          <div class="fact"><span>收盘价 / 涨跌</span><b class="${Number(signal.close_change) >= 0 ? 'up' : 'down'}">${price(signal.close_price)} · ${pct(signal.close_change)}</b></div>
+          <div class="fact"><span>收盘状态</span><b>${signal.disappeared_at_close
+            ? '<span class="badge">多头已消失</span>'
+            : (signal.close_complete ? '多头仍在' : '盘中')}</b></div>
         </div>
         <p class="models">提名：${modelText || '--'}</p>
       </article>`;
@@ -325,26 +333,36 @@
         signalPage * signalPageSize);
       const summary = DATA.signals || {};
       $('#signals-count').textContent =
-        `股票 ${summary.stock_count || 0} 只 · 信号 ${summary.count || 0} 条 · 多头 ${summary.long_count || 0} · 空头 ${summary.short_count || 0} · 当前筛选 ${rows.length}`;
+        `股票 ${summary.stock_count || 0} 只 · 信号 ${summary.count || 0} 条 · 多头 ${summary.long_count || 0} · 空头 ${summary.short_count || 0} · 收盘消失 ${summary.disappeared_count || 0} · 当前筛选 ${rows.length}`;
       $('#signals-table').innerHTML = `<thead><tr>
         <th>方向</th><th>时间</th><th>代码</th><th>名称</th>
-        <th>强度</th><th>信号价</th><th>前收盘</th><th>涨跌幅</th>
+        <th>强度</th><th>信号价</th><th>信号时涨跌</th>
+        <th>收盘价</th><th>收盘涨跌</th><th>信号至收盘</th>
+        <th>最高 / 最低</th><th>最大涨 / 跌</th><th>收盘状态</th>
         <th>概率</th><th>行业/板块</th><th>来源</th>
       </tr></thead><tbody>${shown.length ? shown.map(row => {
         const long = row.direction === 1;
-        return `<tr>
+        return `<tr class="${row.disappeared_at_close ? 'vanished' : ''}">
           <td class="${long ? 'up' : 'down'}">${long ? '多' : '空'}</td>
           <td>${esc(clock(row.quote_at))}</td>
           <td><button class="stock-link" data-code="${esc(row.code)}">${esc(row.code)}</button></td>
           <td><button class="stock-link" data-code="${esc(row.code)}">${esc(row.name)}</button></td>
           <td>${row.strength === 'weak' ? '弱' : '强'}</td>
-          <td>${price(row.price)}</td><td>${price(row.previous_close)}</td>
+          <td>${price(row.price)}</td>
           <td class="${Number(row.change) >= 0 ? 'up' : 'down'}">${pct(row.change)}</td>
+          <td>${price(row.close_price)}</td>
+          <td class="${Number(row.close_change) >= 0 ? 'up' : 'down'}">${pct(row.close_change)}</td>
+          <td class="${Number(row.signal_to_close) >= 0 ? 'up' : 'down'}">${pct(row.signal_to_close)}</td>
+          <td>${price(row.high)} / ${price(row.low)}</td>
+          <td><span class="up">${pct(row.max_rise)}</span> / <span class="down">${pct(row.max_decline)}</span></td>
+          <td>${row.disappeared_at_close
+            ? `<span class="badge">${long ? '多头' : '空头'}已消失</span>`
+            : (row.close_complete ? `${long ? '多头' : '空头'}仍在` : '盘中')}</td>
           <td>${(Number(row.probability) * 100).toFixed(1)}%</td>
           <td>${esc(String(row.industry || '').replace(/^[A-Z]\d{2}/, '') || '--')}</td>
           <td>${esc(sourceName(row.source))}</td>
         </tr>`;
-      }).join('') : '<tr><td colspan="11" class="empty">当前筛选没有信号</td></tr>'}</tbody>`;
+      }).join('') : '<tr><td colspan="16" class="empty">当前筛选没有信号</td></tr>'}</tbody>`;
       $('#signal-page').textContent = `${signalPage} / ${pages}`;
       $('#signal-prev').disabled = signalPage <= 1;
       $('#signal-next').disabled = signalPage >= pages;
@@ -355,7 +373,8 @@
         row.code === code && row.direction !== 0);
     }
 
-    function parseMinute(payload, symbol, date, previousClose) {
+    function parseMinute(
+        payload, symbol, date, previousClose, targetClose = null) {
       const days = payload?.data?.[symbol]?.data;
       const target = Array.isArray(days)
         ? days.find(item => String(item?.date || '') === date)
@@ -386,7 +405,46 @@
       if (!points.length || !Number.isFinite(previousClose) || previousClose <= 0) {
         throw new Error('分钟行情数据不完整');
       }
-      return {date, previousClose, points};
+      const factor = Number.isFinite(Number(targetClose))
+        && Number(targetClose) > 0
+        ? Number(targetClose) / points.at(-1)[1] : 1;
+      const adjusted = factor === 1 ? points : points.map(row => [
+        row[0],row[1] * factor,row[2],
+        Number.isFinite(row[3]) ? row[3] * factor : null,
+      ]);
+      return {
+        date:`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6)}`,
+        previousClose,points:adjusted,source:'腾讯在线1分钟价量',
+      };
+    }
+
+    function parsePersistedMinutes(payload, code) {
+      if (payload?.schema !== 'awakening-trend-live-stock-v1'
+          || payload.code !== code || !Array.isArray(payload.days)) {
+        throw new Error('本地分钟快照不完整');
+      }
+      return payload.days.flatMap(day => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(day.date))
+            || !Array.isArray(day.points) || !day.points.length
+            || !Number.isFinite(Number(day.previous_close))) return [];
+        let cumulativeVolume = 0;
+        let cumulativeAmount = 0;
+        const points = day.points.map(row => {
+          const volume = Number(row[2] || 0);
+          const amount = Number(row[3] || 0);
+          cumulativeVolume += Math.max(0, volume);
+          cumulativeAmount += Math.max(0, amount);
+          return [
+            String(row[0]),Number(row[1]),volume,
+            cumulativeVolume > 0 ? cumulativeAmount / cumulativeVolume : null,
+          ];
+        }).filter(row =>
+          /^\d{4}$/.test(row[0]) && Number.isFinite(row[1]) && row[1] > 0);
+        return points.length ? [{
+          date:String(day.date),previousClose:Number(day.previous_close),
+          points,source:day.source || '腾讯/新浪真实分钟快照',
+        }] : [];
+      });
     }
 
     function parseDaily(payload, symbol) {
@@ -468,17 +526,20 @@
       });
     }
 
-    function signalMarks(points, rows) {
+    function signalMarks(points, rows, date) {
       const times = new Set(points.map(point => point[0]));
-      return rows.flatMap(row => {
+      return rows.filter(row =>
+        String(row.quote_at || '').slice(0,10) === date).flatMap(row => {
         const match = String(row.quote_at || '').match(/T(\d{2}):(\d{2})/);
         const rawAt = match ? `${match[1]}${match[2]}` : '';
         if (!times.has(rawAt)) return [];
         const at = `${rawAt.slice(0, 2)}:${rawAt.slice(2)}`;
         const long = row.direction === 1;
+        const chartPrice = Number.isFinite(Number(row.qfq_price))
+          ? Number(row.qfq_price) : Number(row.price);
         return [{
           name: long ? '多' : '空',
-          coord: [at, Number(row.price)],
+          coord: [at, chartPrice],
           value: `${long ? '多' : '空'} ${clock(row.quote_at)} ${price(row.price)}`,
           symbol: 'circle', symbolSize: 18,
           symbolOffset: [0, long ? '-55%' : '55%'],
@@ -503,7 +564,17 @@
         ...values.map(value => Math.abs(value - data.previousClose))) * 1.12;
       stockChart.setOption({
         animation: false,
-        tooltip: {trigger: 'axis', confine: true},
+        tooltip: {trigger: 'axis',confine:true,formatter:items => {
+          const index = items[0]?.dataIndex;
+          if (index == null) return '';
+          const value = values[index];
+          const change = value / data.previousClose - 1;
+          return `${data.date} ${times[index]}<br>价格 ${price(value)}`
+            + `<br>涨跌幅 ${pct(change)}`
+            + (Number.isFinite(averages[index])
+              ? `<br>均价 ${price(averages[index])}` : '')
+            + `<br>成交量 ${Number(volumes[index]).toLocaleString('zh-CN')} 股`;
+        }},
         legend: {top: 0, right: 8, textStyle: {color: '#9ba9af'}},
         grid: [
           {left: 62, right: 18, top: 54, height: '55%'},
@@ -524,7 +595,7 @@
         series: [
           {name:'价格',type:'line',data:values,showSymbol:false,
             lineStyle:{color:'#78a8e8',width:2},itemStyle:{color:'#78a8e8'},
-            markPoint:{data:signalMarks(points,stockState.signals)},
+            markPoint:{data:signalMarks(points,stockState.signals,data.date)},
             markLine:{silent:true,symbol:'none',lineStyle:{type:'dashed',color:'#e4b95c'},
               label:{formatter:'0.00%',color:'#e4b95c'},
               data:[{yAxis:data.previousClose}]}},
@@ -537,7 +608,7 @@
         ],
       }, true);
       $('#chart-status').textContent =
-        `${data.date.slice(0,4)}-${data.date.slice(4,6)}-${data.date.slice(6)} · 腾讯1分钟价量 · 昨收 ${price(data.previousClose)}`;
+        `${data.date} · ${data.source} · 昨收 ${price(data.previousClose)}`;
     }
 
     function drawDaily(data) {
@@ -577,7 +648,16 @@
       const ma10 = movingAverage(closes, 10);
       const ma20 = movingAverage(closes, 20);
       stockChart.setOption({
-        animation:false,tooltip:{trigger:'axis',confine:true},
+        animation:false,tooltip:{trigger:'axis',confine:true,formatter:items => {
+          const index = items[0]?.dataIndex;
+          const row = rows[index];
+          if (!row) return '';
+          return `${row.date}<br>开 ${price(row.open)}　收 ${price(row.close)}`
+            + `<br>高 ${price(row.high)}　低 ${price(row.low)}`
+            + (ma5[index] == null ? '' : `<br>MA5 ${price(ma5[index])}`)
+            + (ma10[index] == null ? '' : `　MA10 ${price(ma10[index])}`)
+            + (ma20[index] == null ? '' : `　MA20 ${price(ma20[index])}`);
+        }},
         legend:{top:0,right:8,data:['MA5','MA10','MA20'],
           textStyle:{color:'#9ba9af'}},
         grid:[
@@ -614,12 +694,20 @@
               row.close>=row.open?'rgba(239,102,102,.58)':'rgba(63,194,139,.58)'}}))},
         ],
       },true);
+      stockChart.off('click');
+      stockChart.on('click', params => {
+        if (params.seriesType !== 'candlestick'
+            || params.seriesName !== '日K') return;
+        const date = dates[params.dataIndex];
+        if (date) setStockView('minute', date);
+      });
       const strongCount = allMarks.filter(row =>
         row.strength !== 'weak').length;
       const weakCount = allMarks.length - strongCount;
       $('#chart-status').textContent =
         `${data.source} · 前复权日K ${rows[0].date} 至 ${rows.at(-1).date}`
-        + ` · 强多空 ${strongCount} · 弱多空 ${weakCount}`;
+        + ` · 强多空 ${strongCount} · 弱多空 ${weakCount}`
+        + ' · 点击K线查看对应日期分时（仅真实1分钟留存日可用）';
     }
 
     async function requestStockJson(url, state, view) {
@@ -640,19 +728,54 @@
       }
     }
 
-    async function loadMinute(state) {
-      $('#chart-status').textContent = '正在读取腾讯1分钟行情';
+    function dailyPreviousClose(daily, date) {
+      const index = (daily?.bars || []).findIndex(row => row.date === date);
+      return index > 0 ? Number(daily.bars[index - 1].close) : null;
+    }
+
+    function dailyClose(daily, date) {
+      const row = (daily?.bars || []).find(item => item.date === date);
+      return row ? Number(row.close) : null;
+    }
+
+    async function loadMinute(state, requestedDate = '') {
+      $('#chart-status').textContent = '正在读取腾讯/新浪真实1分钟行情';
       const symbol = `${state.code.startsWith('6') ? 'sh' : 'sz'}${state.code}`;
-      const payload = await requestStockJson(
-        `https://web.ifzq.gtimg.cn/appstock/app/day/query?code=${symbol}&_=${Date.now()}`,
-        state, 'minute');
-      if (!payload) return;
-      const first = state.signals[0];
-      state.minute = parseMinute(
-        payload, symbol,
-        first.quote_at.slice(0,10).replaceAll('-',''),
-        Number(first.previous_close));
-      drawMinute(state.minute);
+      const days = new Map();
+      try {
+        const response = await fetch(
+          `live/${state.code.slice(0,2)}/${state.code}.json`,
+          {cache:'no-cache'});
+        if (response.ok) {
+          for (const item of parsePersistedMinutes(
+              await response.json(), state.code)) {
+            days.set(item.date, item);
+          }
+        }
+      } catch (_) {}
+      if (!requestedDate || !days.has(requestedDate)) {
+        try {
+          const payload = await requestStockJson(
+            `https://web.ifzq.gtimg.cn/appstock/app/day/query?code=${symbol}&_=${Date.now()}`,
+            state, 'minute');
+          for (const item of payload?.data?.[symbol]?.data || []) {
+            const compact = String(item?.date || '');
+            const date = /^\d{8}$/.test(compact)
+              ? `${compact.slice(0,4)}-${compact.slice(4,6)}-${compact.slice(6)}`
+              : '';
+            const previousClose = dailyPreviousClose(state.daily, date);
+            if (!date || !Number.isFinite(previousClose)) continue;
+            try {
+              const parsed = parseMinute(
+                payload, symbol, compact, previousClose,
+                dailyClose(state.daily, date));
+              days.set(parsed.date, parsed);
+            } catch (_) {}
+          }
+        } catch (_) {}
+      }
+      if (!days.size) throw new Error('没有腾讯/新浪真实1分钟数据');
+      state.minute = days;
     }
 
     async function loadDaily(state) {
@@ -684,42 +807,66 @@
       drawDaily(state.daily);
     }
 
-    async function setStockView(view) {
+    async function setStockView(view, requestedDate = '') {
       const state = stockState;
       if (!state) return;
-      state.view = view;
-      $('#minute-tab').classList.toggle('active', view === 'minute');
-      $('#daily-tab').classList.toggle('active', view === 'daily');
-      $('#minute-tab').setAttribute(
-        'aria-selected', String(view === 'minute'));
-      $('#daily-tab').setAttribute(
-        'aria-selected', String(view === 'daily'));
       try {
         if (view === 'minute') {
-          if (!state.minute) await loadMinute(state);
-          else drawMinute(state.minute);
+          state.view = 'minute';
+          if (!state.minute) await loadMinute(state, requestedDate);
+          if (stockState !== state) return;
+          const dates = [...state.minute.keys()].sort();
+          const target = requestedDate || state.date || dates.at(-1);
+          if (!state.minute.has(target)) {
+            state.view = 'daily';
+            if (state.daily) drawDaily(state.daily);
+            $('#chart-status').textContent =
+              `${target} 没有腾讯/新浪真实1分钟数据，已保留日K`;
+            return;
+          }
+          state.date = target;
+          drawMinute(state.minute.get(target));
         } else {
+          state.view = 'daily';
           if (!state.daily) await loadDaily(state);
           else drawDaily(state.daily);
         }
+        $('#minute-tab').classList.toggle('active', view === 'minute');
+        $('#daily-tab').classList.toggle('active', view === 'daily');
+        $('#minute-tab').setAttribute(
+          'aria-selected', String(view === 'minute'));
+        $('#daily-tab').setAttribute(
+          'aria-selected', String(view === 'daily'));
       } catch (error) {
         if (error?.name === 'AbortError' || stockState !== state) return;
         $('#chart-status').textContent = `行情读取失败 · ${String(error)}`;
-        stockChart.clear();
+        if (!state.daily || view === 'daily') stockChart.clear();
       }
     }
 
     function openStock(code) {
       const signals = stockSignals(code);
       if (!signals.length) return;
+      const summary = signals[0];
       stockState = {code,name:signals[0].name,signals,view:'minute',
-        minute:null,daily:null};
+        minute:null,daily:null,date:summary.quote_at.slice(0,10)};
       $('#stock-title').textContent = signals[0].name;
-      $('#stock-code').textContent =
-        `${code} · ${signals.map(row => `${row.direction===1?'多':'空'} ${clock(row.quote_at)} ${price(row.price)}`).join(' · ')}`;
+      const signalText = signals.map(row => {
+        const label = row.direction === 1 ? '多头' : '空头';
+        const vanished = row.disappeared_at_close
+          ? ` <span class="badge">${label}收盘消失</span>` : '';
+        return `${label} ${esc(clock(row.quote_at))} ${price(row.price)}`
+          + `（信号时 ${pct(row.change)}，至收盘 ${pct(row.signal_to_close)}）`
+          + vanished;
+      }).join('　');
+      $('#stock-code').innerHTML =
+        `<strong>${esc(code)}</strong> · ${signalText}<br>`
+        + `收盘 ${price(summary.close_price)}（${pct(summary.close_change)}）`
+        + `　最高 ${price(summary.high)}　最低 ${price(summary.low)}`
+        + `　最大涨幅 ${pct(summary.max_rise)}　最大跌幅 ${pct(summary.max_decline)}`;
       if (!$('#stock-dialog').open) $('#stock-dialog').showModal();
       if (!stockChart) stockChart = echarts.init($('#stock-chart'));
-      setStockView('minute');
+      setStockView('minute', stockState.date);
     }
 
     function render(data) {
