@@ -68,6 +68,10 @@
     .consensus-card.alternate{border-left:3px solid var(--amber)}
     .consensus-top{display:flex;align-items:center;gap:8px;min-width:0}
     .rank{color:var(--muted);font-size:12px;flex:0 0 auto}
+    .batch-badge{display:inline-grid;place-items:center;min-width:24px;height:20px;
+      padding:0 6px;border:1px solid #3f6970;border-radius:4px;color:var(--cyan);
+      background:#17272a;font-size:11px;font-weight:700;flex:0 0 auto}
+    .batch-badge.pm{border-color:#7a6335;color:var(--amber);background:#292316}
     .consensus-name{font-weight:700;color:var(--text);text-decoration:none;
       border:0;background:none;padding:0;min-width:0}
     .consensus-code{color:var(--muted);font-size:12px}
@@ -159,22 +163,12 @@
       </div>
       <div id="board-summary" class="board-meta"></div>
       <div class="board-group">
-        <h3>早盘主榜 · 09:30–10:00</h3>
+        <h3>主榜</h3>
         <div id="primary-grid" class="board-grid"></div>
       </div>
       <div class="board-group">
-        <h3>早盘候补榜</h3>
+        <h3>候补榜</h3>
         <div id="alternate-grid" class="board-grid"></div>
-      </div>
-      <div id="pm-board">
-        <div class="board-group">
-          <h3>午盘主榜 · 13:00–13:30</h3>
-          <div id="pm-primary-grid" class="board-grid"></div>
-        </div>
-        <div class="board-group">
-          <h3>午盘候补榜</h3>
-          <div id="pm-alternate-grid" class="board-grid"></div>
-        </div>
       </div>
     </section>
 
@@ -385,9 +379,14 @@
         `${esc(ballot.model_name || ballot.model)} #${ballot.rank}`).join(' · ');
       const share = Math.max(0, Math.min(100,
         Number(row.vote_share || 0) * 100));
+      const batch = row.batch === 'pm' ? 'pm' : row.batch === 'am' ? 'am' : '';
+      const batchBadge = batch
+        ? `<span class="batch-badge ${batch}">${batch === 'pm' ? '午' : '早'}</span>`
+        : '';
       return `<article class="consensus-card ${tier}">
         <div class="consensus-top">
           <span class="rank">${tier === 'primary' ? 'Top' : '候补'} ${row.rank}</span>
+          ${batchBadge}
           <button class="consensus-name" type="button"
             data-code="${esc(row.code)}">${esc(row.name)}</button>
           <span class="consensus-code">${esc(row.code)}</span>
@@ -413,61 +412,43 @@
       const pm = batches.pm || {status:'waiting',primary:[],alternates:[]};
       const amReady = am.status === 'ready';
       const pmReady = pm.status === 'ready';
-      const primary = amReady && Array.isArray(am.primary) ? am.primary : [];
-      const alternates = amReady && Array.isArray(am.alternates)
-        ? am.alternates : [];
-      const pmPrimary = pmReady && Array.isArray(pm.primary) ? pm.primary : [];
-      const pmAlternates = pmReady && Array.isArray(pm.alternates)
-        ? pm.alternates : [];
+      const ready = board.status === 'ready';
+      const primary = ready && Array.isArray(board.primary) ? board.primary : [];
+      const alternates = ready && Array.isArray(board.alternates)
+        ? board.alternates : [];
       $('#consensus-title').textContent = replay
         ? '前日模型 Top5 × 次日早盘多头'
-        : '模型 Top10 × 同批次多头信号';
-      $('#consensus-count').textContent = replay
-        ? (amReady
+        : '模型 Top10 × 当日多头信号';
+      $('#consensus-count').textContent = ready
+        ? `主榜 ${primary.length} 只 · 候补 ${alternates.length} 只`
+          + (!replay && !pmReady ? ' · 午盘待产出' : '')
+        : replay
+          ? (amReady
           ? `主榜 ${primary.length} 只 · 候补 ${alternates.length} 只`
           : (board.reason === 'model_replay_out_of_range'
             ? '该日没有年度模型 Top5 回放'
             : `模型 Top5 不完整（${board.model_count || 0}/${board.expected_model_count || 12}）`))
-        : `早盘 ${amReady ? `${primary.length + alternates.length} 只` : '等待'}`
-          + ` · 午盘 ${pmReady ? `${pmPrimary.length + pmAlternates.length} 只` : '等待'}`;
-      $('#board-summary').innerHTML = replay && amReady
-        ? `<span>模型 <strong>${am.model_count}</strong></span>
-          <span>交集候选 <strong>${am.candidate_count}</strong></span>
+          : '等待模型名单与多头信号';
+      $('#board-summary').innerHTML = ready
+        ? `<span>模型 <strong>${board.model_count}</strong></span>
+          <span>交集候选 <strong>${board.candidate_count}</strong></span>
           <span>主榜门槛 <strong>${policy.primary_min_votes} 票</strong></span>
           <span>候补门槛 <strong>${policy.alternate_min_votes} 票</strong></span>`
-        : !replay
-          ? `<span>早盘模型 <strong>${amReady ? am.model_count : '--'}</strong></span>
-            <span>早盘交集 <strong>${amReady ? am.candidate_count : '--'}</strong></span>
-            <span>午盘模型 <strong>${pmReady ? pm.model_count : '--'}</strong></span>
-            <span>午盘交集 <strong>${pmReady ? pm.candidate_count : '--'}</strong></span>
-            <span>主榜 <strong>≥${policy.primary_min_votes}票</strong></span>
-            <span>候补 <strong>${policy.alternate_min_votes}票</strong></span>`
-          : '';
-      $('#primary-grid').innerHTML = amReady
+        : '';
+      $('#primary-grid').innerHTML = ready
         ? (primary.length
           ? primary.map(row => consensusCard(row, 'primary')).join('')
-          : '<div class="empty">早盘没有股票同时达到主榜和多头信号门槛</div>')
+          : '<div class="empty">当天没有股票同时达到主榜和多头信号门槛</div>')
         : `<div class="empty">${replay
           ? '历史模型名单不完整，已关闭当日共识计算'
-          : '早盘模型名单或信号尚未完整冻结'}</div>`;
-      $('#alternate-grid').innerHTML = amReady
+          : '模型名单或信号尚未完整冻结'}</div>`;
+      $('#alternate-grid').innerHTML = ready
         ? (alternates.length
           ? alternates.map(row => consensusCard(row, 'alternate')).join('')
-          : '<div class="empty">早盘没有达到候补门槛的交集股票</div>')
+          : '<div class="empty">当天没有达到候补门槛的交集股票</div>')
         : `<div class="empty">${replay
           ? '缺失日期不使用部分模型投票'
-          : '早盘数据尚未完整冻结'}</div>`;
-      $('#pm-board').hidden = replay;
-      $('#pm-primary-grid').innerHTML = pmReady
-        ? (pmPrimary.length
-          ? pmPrimary.map(row => consensusCard(row, 'primary')).join('')
-          : '<div class="empty">午盘没有股票同时达到主榜和多头信号门槛</div>')
-        : '<div class="empty">等待11:30后独立PM模型名单与13:00–13:30多头信号</div>';
-      $('#pm-alternate-grid').innerHTML = pmReady
-        ? (pmAlternates.length
-          ? pmAlternates.map(row => consensusCard(row, 'alternate')).join('')
-          : '<div class="empty">午盘没有达到候补门槛的交集股票</div>')
-        : '<div class="empty">午盘数据尚未完整冻结</div>';
+          : '数据尚未完整冻结'}</div>`;
       $('#consensus-policy').textContent = replay
         ? `历史技术 Top${policy.vote_limit_per_strategy || 5} 回放`
           + ` ∩ 09:30–10:00首次多头 · 主榜≥${policy.primary_min_votes || 2}票`
