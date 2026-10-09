@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#101416">
   <link rel="icon" href="data:,">
-  <title>当日多空信号</title>
+  <title>模型共识与多空信号</title>
   <script src="echarts.min.js"></script>
   <style>
     :root{
@@ -44,6 +44,28 @@
     .section-head h2{font-size:21px}
     .up{color:var(--red)}.down{color:var(--green)}
     .models{margin-top:11px;color:#c8d2d6;font-size:12px;overflow-wrap:anywhere}
+    .consensus-section{padding-bottom:26px;margin-bottom:24px;border-bottom:1px solid var(--line)}
+    .board-meta{display:flex;gap:8px 18px;flex-wrap:wrap;color:var(--muted);
+      font-size:13px;margin-bottom:14px}
+    .board-meta strong{color:var(--text);font-variant-numeric:tabular-nums}
+    .board-group{margin-top:16px}
+    .board-group h3{font-size:14px;margin-bottom:9px;color:#d9e2e5}
+    .board-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+      gap:10px}
+    .consensus-card{min-width:0;border:1px solid var(--line);border-radius:6px;
+      padding:13px 14px;background:var(--surface)}
+    .consensus-card.primary{border-left:3px solid var(--red)}
+    .consensus-card.alternate{border-left:3px solid var(--amber)}
+    .consensus-top{display:flex;align-items:center;gap:8px;min-width:0}
+    .rank{color:var(--muted);font-size:12px;flex:0 0 auto}
+    .consensus-name{font-weight:700;color:var(--text);text-decoration:none;
+      border:0;background:none;padding:0;min-width:0}
+    .consensus-code{color:var(--muted);font-size:12px}
+    .vote{margin-left:auto;color:var(--cyan);font-weight:700;font-size:12px}
+    .vote-track{height:4px;background:#263137;margin:10px 0 8px;overflow:hidden}
+    .vote-track span{display:block;height:100%;background:var(--cyan)}
+    .signal-line{font-size:12px;color:#c8d2d6}
+    .ballots{font-size:11px;color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
     .empty{padding:34px 18px;border:1px dashed var(--line);border-radius:6px;
       color:var(--muted);text-align:center;background:var(--surface)}
     .signal-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -100,7 +122,7 @@
   <header class="top">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">∩</div>
-      <div><div class="eyebrow">AWAKENING / QUANT</div><h1>当日多空信号</h1></div>
+      <div><div class="eyebrow">AWAKENING / QUANT</div><h1>模型共识与多空信号</h1></div>
     </div>
     <div class="actions">
       <div id="generated" class="generated" role="status">正在读取数据</div>
@@ -109,6 +131,25 @@
   </header>
 
   <main>
+    <section id="consensus-section" class="consensus-section"
+      aria-labelledby="consensus-title">
+      <div class="section-head">
+        <div>
+          <h2 id="consensus-title">模型共识 × 当日多头信号</h2>
+          <span id="consensus-count">--</span>
+        </div>
+      </div>
+      <div id="board-summary" class="board-meta"></div>
+      <div class="board-group">
+        <h3>主榜</h3>
+        <div id="primary-grid" class="board-grid"></div>
+      </div>
+      <div class="board-group">
+        <h3>候补榜</h3>
+        <div id="alternate-grid" class="board-grid"></div>
+      </div>
+    </section>
+
     <section class="section" aria-labelledby="signals-title">
       <div class="section-head">
         <div>
@@ -141,6 +182,7 @@
     <footer class="foot">
       <span id="signal-date">交易日 --</span>
       <span id="signal-through">多空信号观测 --</span>
+      <span id="consensus-policy">共识口径 --</span>
     </footer>
   </main>
 
@@ -247,6 +289,61 @@
     function stockSignals(code) {
       return (DATA.signals?.rows || []).filter(row =>
         row.code === code && row.direction !== 0);
+    }
+
+    function consensusCard(row, tier) {
+      const signal = row.signal || {};
+      const ballots = (row.ballots || []).map(ballot =>
+        `${esc(ballot.model_name || ballot.model)} #${ballot.rank}`).join(' · ');
+      const share = Math.max(0, Math.min(100,
+        Number(row.vote_share || 0) * 100));
+      return `<article class="consensus-card ${tier}">
+        <div class="consensus-top">
+          <span class="rank">${tier === 'primary' ? 'Top' : '候补'} ${row.rank}</span>
+          <button class="consensus-name" type="button"
+            data-code="${esc(row.code)}">${esc(row.name)}</button>
+          <span class="consensus-code">${esc(row.code)}</span>
+          <span class="vote">${row.votes}/${DATA.board.model_count} 票</span>
+        </div>
+        <div class="vote-track" aria-hidden="true"><span style="width:${share}%"></span></div>
+        <p class="signal-line">多头 ${esc(clock(signal.quote_at))} ·
+          ${price(signal.price)} ·
+          <span class="${Number(signal.change) >= 0 ? 'up' : 'down'}">${pct(signal.change)}</span>
+          · Borda ${row.borda_points}</p>
+        <p class="ballots">${ballots || '--'}</p>
+      </article>`;
+    }
+
+    function renderConsensus() {
+      const board = DATA.board || {};
+      const policy = DATA.policy || {};
+      const ready = board.status === 'ready';
+      const primary = ready && Array.isArray(board.primary) ? board.primary : [];
+      const alternates = ready && Array.isArray(board.alternates)
+        ? board.alternates : [];
+      $('#consensus-count').textContent = ready
+        ? `主榜 ${primary.length} 只 · 候补 ${alternates.length} 只`
+        : '等待同日模型最终名单与多头信号';
+      $('#board-summary').innerHTML = ready
+        ? `<span>模型 <strong>${board.model_count}</strong></span>
+          <span>交集候选 <strong>${board.candidate_count}</strong></span>
+          <span>主榜门槛 <strong>${policy.primary_min_votes} 票</strong></span>
+          <span>候补门槛 <strong>${policy.alternate_min_votes} 票</strong></span>`
+        : '';
+      $('#primary-grid').innerHTML = ready
+        ? (primary.length
+          ? primary.map(row => consensusCard(row, 'primary')).join('')
+          : '<div class="empty">当天没有股票同时达到主榜共识和多头信号门槛</div>')
+        : '<div class="empty">同日数据尚未完整冻结</div>';
+      $('#alternate-grid').innerHTML = ready
+        ? (alternates.length
+          ? alternates.map(row => consensusCard(row, 'alternate')).join('')
+          : '<div class="empty">当天没有达到候补门槛的交集股票</div>')
+        : '<div class="empty">同日数据尚未完整冻结</div>';
+      $('#consensus-policy').textContent =
+        `每模型最终 Top${policy.vote_limit_per_strategy || 10}`
+        + ` ∩ 当日多头 · 主榜≥${policy.primary_min_votes || 3}票`
+        + ` · 候补≥${policy.alternate_min_votes || 2}票`;
     }
 
     function parseMinute(
@@ -746,7 +843,8 @@
     }
 
     function render(data) {
-      if (data?.schema !== 'awakening-daily-signals-dashboard-v1'
+      if (data?.schema !== 'awakening-consensus-dashboard-v1'
+          || !data.board || !data.policy
           || !Array.isArray(data.signals?.rows)) {
         throw new Error('数据结构不兼容');
       }
@@ -758,6 +856,7 @@
         : '交易日 --';
       $('#signal-through').textContent =
         `多空信号观测至 ${stamp(data.signals.observed_through)}`;
+      renderConsensus();
       renderSignals();
     }
 
@@ -804,6 +903,10 @@
       signalPage += 1; renderSignals();
     });
     $('#signals-table').addEventListener('click', event => {
+      const link = event.target.closest('[data-code]');
+      if (link) openStock(link.dataset.code);
+    });
+    $('#consensus-section').addEventListener('click', event => {
       const link = event.target.closest('[data-code]');
       if (link) openStock(link.dataset.code);
     });
