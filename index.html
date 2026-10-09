@@ -228,6 +228,16 @@
       ? `¥${Number(value).toFixed(2)}` : '--';
     const sourceName = value =>
       value === 'tencent' ? '腾讯' : value === 'sina' ? '新浪' : value || '--';
+    const signalColors = {
+      strongLong:'#ef6666',weakLong:'#ef6666',
+      strongShort:'#3fc28b',weakShort:'#3fc28b',
+    };
+    const signalLabel = (direction, strength) => {
+      const long = Number(direction) === 1;
+      return strength === 'weak'
+        ? (long ? '涨' : '跌')
+        : (long ? '多' : '空');
+    };
     const axis = {
       axisLine: {lineStyle: {color: '#425058'}},
       axisLabel: {color: '#9ba9af'},
@@ -600,7 +610,7 @@
       const currentMarks = stockState.signals.map(row => ({
         date:row.quote_at.slice(0,10),direction:row.direction,
         strength:row.strength,probability:row.probability,
-        price:Number(row.qfq_price),time:clock(row.quote_at),
+        price:Number(row.qfq_price),time:clock(row.quote_at),live:true,
       }));
       const seen = new Set(currentMarks.map(row =>
         `${row.date}/${row.direction}/${row.strength}`));
@@ -613,18 +623,30 @@
         const index = dates.indexOf(row.date);
         if (index < 0) return [];
         const long = row.direction === 1;
-        const weak = row.strength === 'weak';
-        const label = weak ? (long ? '弱多' : '弱空') : (long ? '多' : '空');
-        const markPrice = Number.isFinite(row.price)
-          ? row.price : long ? rows[index].low : rows[index].high;
-        return [{name:label,coord:[index,markPrice],
-          value:`${label}${row.time ? ` ${row.time}` : ''} ${price(markPrice)}`,
-          symbol:weak?'emptyCircle':'circle',symbolSize:weak?13:18,
-          symbolOffset:[0,long?'60%':'-60%'],
-          itemStyle:{color:long?'#ef6666':'#3fc28b'},
-          label:{show:true,color:long?'#ef6666':'#3fc28b',
-            backgroundColor:'rgba(13,17,19,.9)',borderRadius:3,
-            padding:[2,4],fontSize:weak?9:10,formatter:label}}];
+        const strong = row.strength !== 'weak';
+        const label = signalLabel(row.direction, row.strength);
+        const color = long
+          ? (strong ? signalColors.strongLong : signalColors.weakLong)
+          : (strong ? signalColors.strongShort : signalColors.weakShort);
+        const mark = {
+          name:row.live ? `盘中首${label}` : label,
+          coord:[index,long ? rows[index].low : rows[index].high],
+          value:label,
+          symbol:row.live ? 'diamond' : 'circle',
+          symbolSize:row.live ? 22 : (strong ? 28 : 22),
+          itemStyle:{
+            color,borderColor:'#101619',
+            borderWidth:row.live ? 2 : (strong ? 2 : 1),
+            opacity:strong ? 1 : .9,
+          },
+          label:{show:true,color:'#ffffff',
+            fontSize:row.live ? 9 : (strong ? 11 : 9),
+            fontWeight:700,formatter:label},
+        };
+        if (!row.live) {
+          mark.symbolOffset = [0,long?'68%':'-68%'];
+        }
+        return [mark];
       });
       const closes = rows.map(row => row.close);
       const ma5 = movingAverage(closes, 5);
@@ -665,7 +687,7 @@
             data:rows.map(row=>[row.open,row.close,row.low,row.high]),
             itemStyle:{color:'#ef6666',color0:'#3fc28b',
               borderColor:'#ef6666',borderColor0:'#3fc28b'},
-            markPoint:{data:marks}},
+            markPoint:{silent:true,data:marks}},
           {name:'MA5',type:'line',data:ma5,showSymbol:false,
             lineStyle:{width:1.3,color:'#e4b95c'}},
           {name:'MA10',type:'line',data:ma10,showSymbol:false,
