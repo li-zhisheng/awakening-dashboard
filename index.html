@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#101416">
   <link rel="icon" href="data:,">
-  <title>模型共识与多空信号</title>
+  <title>量化交易</title>
   <script src="echarts.min.js"></script>
   <style>
     :root{
@@ -39,6 +39,11 @@
     .section-head{display:flex;justify-content:space-between;
       align-items:flex-end;gap:18px}
     .section-head span{margin-top:5px;color:var(--muted);font-size:13px}
+    .date-control{display:flex;align-items:center;gap:8px;color:var(--muted);
+      font-size:12px}
+    .date-control select{height:38px;border:1px solid var(--line);border-radius:5px;
+      background:var(--surface2);color:var(--text);padding:0 30px 0 10px}
+    .date-control select:disabled{opacity:.55}
     .section{padding-top:4px}
     .section-head{margin-bottom:12px}
     .section-head h2{font-size:21px}
@@ -122,7 +127,7 @@
   <header class="top">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">∩</div>
-      <div><div class="eyebrow">AWAKENING / QUANT</div><h1>模型共识与多空信号</h1></div>
+      <div><div class="eyebrow">AWAKENING / QUANT</div><h1>量化交易</h1></div>
     </div>
     <div class="actions">
       <div id="generated" class="generated" role="status">正在读取数据</div>
@@ -138,6 +143,9 @@
           <h2 id="consensus-title">模型共识 × 当日多头信号</h2>
           <span id="consensus-count">--</span>
         </div>
+        <label class="date-control">交易日
+          <select id="date-select" aria-label="选择交易日"></select>
+        </label>
       </div>
       <div id="board-summary" class="board-meta"></div>
       <div class="board-group">
@@ -153,7 +161,7 @@
     <section class="section" aria-labelledby="signals-title">
       <div class="section-head">
         <div>
-          <h2 id="signals-title">最近交易日全部信号</h2>
+          <h2 id="signals-title">所选交易日全部信号</h2>
           <span id="signals-count">--</span>
         </div>
         <div class="signal-tools">
@@ -226,6 +234,8 @@
       splitLine: {lineStyle: {color: '#263137'}},
     };
     let DATA = null;
+    const DATE_CACHE = new Map();
+    let activeDate = '';
     let etag = '';
     let direction = 'all';
     let signalPage = 1;
@@ -792,13 +802,15 @@
           const target = requestedDate || state.date || dates.at(-1);
           if (!state.minute.has(target)) {
             state.view = 'daily';
-            if (state.daily) drawDaily(state.daily);
+            view = 'daily';
+            if (!state.daily) await loadDaily(state);
+            else drawDaily(state.daily);
             $('#chart-status').textContent =
-              `${target} 没有腾讯/新浪真实1分钟数据，已保留日K`;
-            return;
+              `${target} 没有腾讯/新浪真实1分钟数据，已切换日K`;
+          } else {
+            state.date = target;
+            drawMinute(state.minute.get(target));
           }
-          state.date = target;
-          drawMinute(state.minute.get(target));
         } else {
           state.view = 'daily';
           if (!state.daily) await loadDaily(state);
@@ -842,28 +854,80 @@
       setStockView('minute', stockState.date);
     }
 
+    function dayLabel(day) {
+      return /^\d{8}$/.test(String(day))
+        ? `${day.slice(0,4)}-${day.slice(4,6)}-${day.slice(6)}`
+        : String(day || '--');
+    }
+
+    function renderDateSelector(data, day) {
+      const dates = [...new Set(data.available_dates || [])]
+        .filter(value => /^\d{8}$/.test(String(value)))
+        .sort().reverse();
+      $('#date-select').innerHTML = dates.map(value =>
+        `<option value="${value}">${dayLabel(value)}</option>`).join('');
+      $('#date-select').value = day;
+    }
+
     function render(data) {
       if (data?.schema !== 'awakening-consensus-dashboard-v1'
           || !data.board || !data.policy
+          || !Array.isArray(data.available_dates)
           || !Array.isArray(data.signals?.rows)) {
         throw new Error('数据结构不兼容');
       }
       DATA = data;
-      $('#generated').textContent = `快照 ${stamp(data.generated)}`;
       const day = String(data.signals.date || '');
+      activeDate = day;
+      DATE_CACHE.set(day, data);
+      signalPage = 1;
+      if ($('#stock-dialog').open) $('#stock-dialog').close();
+      $('#generated').textContent = `快照 ${stamp(data.generated)}`;
       $('#signal-date').textContent = /^\d{8}$/.test(day)
-        ? `交易日 ${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6)}`
+        ? `交易日 ${dayLabel(day)}`
         : '交易日 --';
       $('#signal-through').textContent =
         `多空信号观测至 ${stamp(data.signals.observed_through)}`;
+      renderDateSelector(data, day);
       renderConsensus();
       renderSignals();
+    }
+
+    async function loadDate(day, force = false) {
+      if (!/^\d{8}$/.test(String(day))) return;
+      const prior = activeDate;
+      const select = $('#date-select');
+      select.disabled = true;
+      $('#generated').textContent = `正在读取 ${dayLabel(day)}`;
+      try {
+        if (!force && DATE_CACHE.has(day)) {
+          render(DATE_CACHE.get(day));
+          return;
+        }
+        const response = await fetch(
+          `history/${day}.json`, {cache:'no-cache'});
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        render(await response.json());
+      } catch (error) {
+        select.value = prior;
+        $('#generated').textContent =
+          `历史数据读取失败 · ${String(error)}`;
+      } finally {
+        select.disabled = false;
+      }
     }
 
     async function refresh() {
       const button = $('#refresh');
       button.disabled = true;
       try {
+        if (
+            activeDate
+            && DATA?.latest_date
+            && activeDate !== DATA.latest_date) {
+          await loadDate(activeDate, true);
+          return;
+        }
         const headers = etag ? {'If-None-Match': etag} : {};
         let response = await fetch('data.json', {cache:'no-cache',headers});
         if (!response.ok && location.hostname === '127.0.0.1') {
@@ -881,6 +945,8 @@
     }
 
     $('#refresh').addEventListener('click', refresh);
+    $('#date-select').addEventListener('change', event =>
+      loadDate(event.target.value));
     $('#signal-search').addEventListener('input', () => {
       signalPage = 1; renderSignals();
     });
