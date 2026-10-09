@@ -41,6 +41,11 @@
     .section-head span{margin-top:5px;color:var(--muted);font-size:13px}
     .date-control{display:flex;align-items:center;gap:8px;color:var(--muted);
       font-size:12px}
+    .date-nav{width:38px;height:38px;padding:0;border:1px solid var(--line);
+      border-radius:5px;background:var(--surface2);color:var(--text);
+      font-size:21px;line-height:1}
+    .date-nav:hover:not(:disabled){border-color:var(--cyan);color:var(--cyan)}
+    .date-nav:disabled{opacity:.35;cursor:not-allowed}
     .date-control select{height:38px;border:1px solid var(--line);border-radius:5px;
       background:var(--surface2);color:var(--text);padding:0 30px 0 10px}
     .date-control select:disabled{opacity:.55}
@@ -144,18 +149,32 @@
           <h2 id="consensus-title">模型共识 × 当日多头信号</h2>
           <span id="consensus-count">--</span>
         </div>
-        <label class="date-control">交易日
+        <div class="date-control"><span>交易日</span>
+          <button id="date-prev" class="date-nav" type="button"
+            title="上一个交易日" aria-label="上一个交易日">‹</button>
           <select id="date-select" aria-label="选择交易日"></select>
-        </label>
+          <button id="date-next" class="date-nav" type="button"
+            title="下一个交易日" aria-label="下一个交易日">›</button>
+        </div>
       </div>
       <div id="board-summary" class="board-meta"></div>
       <div class="board-group">
-        <h3>主榜</h3>
+        <h3>早盘主榜 · 09:30–10:00</h3>
         <div id="primary-grid" class="board-grid"></div>
       </div>
       <div class="board-group">
-        <h3>候补榜</h3>
+        <h3>早盘候补榜</h3>
         <div id="alternate-grid" class="board-grid"></div>
+      </div>
+      <div id="pm-board">
+        <div class="board-group">
+          <h3>午盘主榜 · 13:00–13:30</h3>
+          <div id="pm-primary-grid" class="board-grid"></div>
+        </div>
+        <div class="board-group">
+          <h3>午盘候补榜</h3>
+          <div id="pm-alternate-grid" class="board-grid"></div>
+        </div>
       </div>
     </section>
 
@@ -372,7 +391,7 @@
           <button class="consensus-name" type="button"
             data-code="${esc(row.code)}">${esc(row.name)}</button>
           <span class="consensus-code">${esc(row.code)}</span>
-          <span class="vote">${row.votes}/${DATA.board.model_count} 票</span>
+          <span class="vote">${row.votes}/${row.model_count || DATA.board.model_count} 票</span>
         </div>
         <div class="vote-track" aria-hidden="true"><span style="width:${share}%"></span></div>
         <p class="signal-line">${DATA.signals?.mode === 'historical_replay'
@@ -389,47 +408,73 @@
       const board = DATA.board || {};
       const policy = DATA.policy || {};
       const replay = DATA.signals?.mode === 'historical_replay';
-      const ready = board.status === 'ready';
-      const primary = ready && Array.isArray(board.primary) ? board.primary : [];
-      const alternates = ready && Array.isArray(board.alternates)
-        ? board.alternates : [];
+      const batches = !replay ? (board.batches || {}) : {};
+      const am = batches.am || board;
+      const pm = batches.pm || {status:'waiting',primary:[],alternates:[]};
+      const amReady = am.status === 'ready';
+      const pmReady = pm.status === 'ready';
+      const primary = amReady && Array.isArray(am.primary) ? am.primary : [];
+      const alternates = amReady && Array.isArray(am.alternates)
+        ? am.alternates : [];
+      const pmPrimary = pmReady && Array.isArray(pm.primary) ? pm.primary : [];
+      const pmAlternates = pmReady && Array.isArray(pm.alternates)
+        ? pm.alternates : [];
       $('#consensus-title').textContent = replay
         ? '前日模型 Top5 × 次日早盘多头'
-        : '09:25模型共识 × 早盘多头';
-      $('#consensus-count').textContent = ready
-        ? `主榜 ${primary.length} 只 · 候补 ${alternates.length} 只`
-        : replay
-          ? (board.reason === 'model_replay_out_of_range'
+        : '模型 Top10 × 同批次多头信号';
+      $('#consensus-count').textContent = replay
+        ? (amReady
+          ? `主榜 ${primary.length} 只 · 候补 ${alternates.length} 只`
+          : (board.reason === 'model_replay_out_of_range'
             ? '该日没有年度模型 Top5 回放'
-            : `模型 Top5 不完整（${board.model_count || 0}/${board.expected_model_count || 12}）`)
-          : '等待同日模型最终名单与多头信号';
-      $('#board-summary').innerHTML = ready
-        ? `<span>模型 <strong>${board.model_count}</strong></span>
-          <span>交集候选 <strong>${board.candidate_count}</strong></span>
+            : `模型 Top5 不完整（${board.model_count || 0}/${board.expected_model_count || 12}）`))
+        : `早盘 ${amReady ? `${primary.length + alternates.length} 只` : '等待'}`
+          + ` · 午盘 ${pmReady ? `${pmPrimary.length + pmAlternates.length} 只` : '等待'}`;
+      $('#board-summary').innerHTML = replay && amReady
+        ? `<span>模型 <strong>${am.model_count}</strong></span>
+          <span>交集候选 <strong>${am.candidate_count}</strong></span>
           <span>主榜门槛 <strong>${policy.primary_min_votes} 票</strong></span>
           <span>候补门槛 <strong>${policy.alternate_min_votes} 票</strong></span>`
-        : '';
-      $('#primary-grid').innerHTML = ready
+        : !replay
+          ? `<span>早盘模型 <strong>${amReady ? am.model_count : '--'}</strong></span>
+            <span>早盘交集 <strong>${amReady ? am.candidate_count : '--'}</strong></span>
+            <span>午盘模型 <strong>${pmReady ? pm.model_count : '--'}</strong></span>
+            <span>午盘交集 <strong>${pmReady ? pm.candidate_count : '--'}</strong></span>
+            <span>主榜 <strong>≥${policy.primary_min_votes}票</strong></span>
+            <span>候补 <strong>${policy.alternate_min_votes}票</strong></span>`
+          : '';
+      $('#primary-grid').innerHTML = amReady
         ? (primary.length
           ? primary.map(row => consensusCard(row, 'primary')).join('')
-          : '<div class="empty">当天没有股票同时达到主榜共识和多头信号门槛</div>')
+          : '<div class="empty">早盘没有股票同时达到主榜和多头信号门槛</div>')
         : `<div class="empty">${replay
           ? '历史模型名单不完整，已关闭当日共识计算'
-          : '同日数据尚未完整冻结'}</div>`;
-      $('#alternate-grid').innerHTML = ready
+          : '早盘模型名单或信号尚未完整冻结'}</div>`;
+      $('#alternate-grid').innerHTML = amReady
         ? (alternates.length
           ? alternates.map(row => consensusCard(row, 'alternate')).join('')
-          : '<div class="empty">当天没有达到候补门槛的交集股票</div>')
+          : '<div class="empty">早盘没有达到候补门槛的交集股票</div>')
         : `<div class="empty">${replay
           ? '缺失日期不使用部分模型投票'
-          : '同日数据尚未完整冻结'}</div>`;
+          : '早盘数据尚未完整冻结'}</div>`;
+      $('#pm-board').hidden = replay;
+      $('#pm-primary-grid').innerHTML = pmReady
+        ? (pmPrimary.length
+          ? pmPrimary.map(row => consensusCard(row, 'primary')).join('')
+          : '<div class="empty">午盘没有股票同时达到主榜和多头信号门槛</div>')
+        : '<div class="empty">等待11:30后独立PM模型名单与13:00–13:30多头信号</div>';
+      $('#pm-alternate-grid').innerHTML = pmReady
+        ? (pmAlternates.length
+          ? pmAlternates.map(row => consensusCard(row, 'alternate')).join('')
+          : '<div class="empty">午盘没有达到候补门槛的交集股票</div>')
+        : '<div class="empty">午盘数据尚未完整冻结</div>';
       $('#consensus-policy').textContent = replay
         ? `历史技术 Top${policy.vote_limit_per_strategy || 5} 回放`
           + ` ∩ 09:30–10:00首次多头 · 主榜≥${policy.primary_min_votes || 2}票`
           + ` · 候补≥${policy.alternate_min_votes || 1}票 · PM历史模型不可用`
-        : `每模型最终 Top${policy.vote_limit_per_strategy || 10}`
-          + ` ∩ 09:30–10:00多头 · 主榜≥${policy.primary_min_votes || 2}票`
-          + ` · 候补≥${policy.alternate_min_votes || 1}票 · PM批次未开放`;
+        : `AM/PM每模型独立 Top${policy.vote_limit_per_strategy || 10}`
+          + ` ∩ 对应时段首次多头 · 主榜≥${policy.primary_min_votes || 2}票`
+          + ` · 候补≥${policy.alternate_min_votes || 1}票 · 禁止跨批次计票`;
     }
 
     function parseMinute(
@@ -1055,6 +1100,21 @@
       $('#date-select').innerHTML = dates.map(value =>
         `<option value="${value}">${dayLabel(value)}</option>`).join('');
       $('#date-select').value = day;
+      syncDateNavigation();
+    }
+
+    function syncDateNavigation(loading = false) {
+      const dates = [...$('#date-select').options].map(option => option.value);
+      const index = dates.indexOf(activeDate);
+      $('#date-prev').disabled = loading || index < 0 || index >= dates.length - 1;
+      $('#date-next').disabled = loading || index <= 0;
+    }
+
+    function loadAdjacentDate(direction) {
+      const dates = [...$('#date-select').options].map(option => option.value);
+      const index = dates.indexOf(activeDate);
+      const target = dates[index + direction];
+      if (target) loadDate(target);
     }
 
     function render(data) {
@@ -1088,6 +1148,7 @@
       const prior = activeDate;
       const select = $('#date-select');
       select.disabled = true;
+      syncDateNavigation(true);
       $('#generated').textContent = `正在读取 ${dayLabel(day)}`;
       try {
         if (!force && DATE_CACHE.has(day)) {
@@ -1104,6 +1165,7 @@
           `历史数据读取失败 · ${String(error)}`;
       } finally {
         select.disabled = false;
+        syncDateNavigation();
       }
     }
 
@@ -1137,6 +1199,8 @@
     $('#refresh').addEventListener('click', refresh);
     $('#date-select').addEventListener('change', event =>
       loadDate(event.target.value));
+    $('#date-prev').addEventListener('click', () => loadAdjacentDate(1));
+    $('#date-next').addEventListener('click', () => loadAdjacentDate(-1));
     $('#signal-search').addEventListener('input', () => {
       signalPage = 1; renderSignals();
     });
