@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#101416">
   <link rel="icon" href="data:,">
-  <title>模型共识榜</title>
+  <title>当日多空信号</title>
   <script src="echarts.min.js"></script>
   <style>
     :root{
@@ -36,37 +36,12 @@
     .icon-btn:hover,.stock-link:hover{border-color:var(--cyan);color:var(--cyan)}
     .icon-btn:disabled{opacity:.55;cursor:wait}
     main{max-width:1180px;margin:0 auto;padding:24px 20px 48px}
-    .board-head,.section-head{display:flex;justify-content:space-between;
+    .section-head{display:flex;justify-content:space-between;
       align-items:flex-end;gap:18px}
-    .board-head{padding-bottom:18px;border-bottom:1px solid var(--line)}
-    .board-head h2{font-size:21px}
-    .board-head p,.section-head span{margin-top:5px;color:var(--muted);font-size:13px}
-    .state{border:1px solid #41666c;border-radius:5px;padding:5px 9px;
-      color:var(--cyan);font-size:12px;white-space:nowrap}
-    .state.waiting{color:var(--amber);border-color:#6f603d}
-    .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
-      border-bottom:1px solid var(--line)}
-    .metric{padding:18px 16px;border-right:1px solid var(--line)}
-    .metric:last-child{border-right:0}
-    .metric span{display:block;color:var(--muted);font-size:12px}
-    .metric strong{display:block;margin-top:4px;font-size:23px;font-variant-numeric:tabular-nums}
-    .section{padding-top:24px}
+    .section-head span{margin-top:5px;color:var(--muted);font-size:13px}
+    .section{padding-top:4px}
     .section-head{margin-bottom:12px}
-    .section-head h3{font-size:16px}
-    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-    .stock{border:1px solid var(--line);border-radius:6px;background:var(--surface);
-      padding:15px;min-width:0}
-    .stock.alt{border-style:dashed}
-    .stock-top{display:flex;align-items:center;gap:10px;min-width:0}
-    .rank{min-width:52px;color:var(--cyan);font-weight:700;font-variant-numeric:tabular-nums}
-    .name{font-size:17px;font-weight:700;overflow-wrap:anywhere}
-    .code{color:var(--muted);font-variant-numeric:tabular-nums}
-    .signal{margin-left:auto;font-weight:700;white-space:nowrap}
-    .facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
-      gap:8px;margin-top:13px}
-    .fact{padding:9px;background:var(--surface2);border-radius:4px;min-width:0}
-    .fact span{display:block;color:var(--muted);font-size:11px}
-    .fact b{display:block;margin-top:3px;font-size:14px;overflow-wrap:anywhere}
+    .section-head h2{font-size:21px}
     .up{color:var(--red)}.down{color:var(--green)}
     .models{margin-top:11px;color:#c8d2d6;font-size:12px;overflow-wrap:anywhere}
     .empty{padding:34px 18px;border:1px dashed var(--line);border-radius:6px;
@@ -116,10 +91,7 @@
     .chart-status{color:var(--muted);font-size:12px;margin-top:8px}
     @media(max-width:760px){
       .top{align-items:flex-start;padding:16px}.actions{gap:8px}.generated{max-width:190px}
-      main{padding:18px 12px 36px}.board-head,.section-head{align-items:flex-start;flex-direction:column}
-      .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
-      .metric:nth-child(2){border-right:0}.metric:nth-child(-n+2){border-bottom:1px solid var(--line)}
-      .grid{grid-template-columns:1fr}.facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+      main{padding:18px 12px 36px}.section-head{align-items:flex-start;flex-direction:column}
       .signal-tools{width:100%}.search{width:100%}.chart{height:350px}
     }
   </style>
@@ -128,7 +100,7 @@
   <header class="top">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">∩</div>
-      <div><div class="eyebrow">AWAKENING / QUANT</div><h1>模型共识榜</h1></div>
+      <div><div class="eyebrow">AWAKENING / QUANT</div><h1>当日多空信号</h1></div>
     </div>
     <div class="actions">
       <div id="generated" class="generated" role="status">正在读取数据</div>
@@ -137,41 +109,10 @@
   </header>
 
   <main>
-    <section class="board-head">
-      <div>
-        <h2 id="board-date">最近交易日</h2>
-        <p>模型最终选股与当日分钟级多头信号的交集</p>
-      </div>
-      <span id="board-state" class="state waiting">读取中</span>
-    </section>
-
-    <section class="metrics" aria-label="共识统计">
-      <div class="metric"><span>参与模型</span><strong id="model-count">--</strong></div>
-      <div class="metric"><span>模型入选股票</span><strong id="selection-count">--</strong></div>
-      <div class="metric"><span>同时出现多头</span><strong id="matched-count">--</strong></div>
-      <div class="metric"><span>最终入榜</span><strong id="board-count">--</strong></div>
-    </section>
-
-    <section class="section" aria-labelledby="primary-title">
-      <div class="section-head">
-        <h3 id="primary-title">主榜</h3>
-        <span id="primary-rule">至少 3 个模型选中</span>
-      </div>
-      <div id="primary-grid" class="grid"></div>
-    </section>
-
-    <section class="section" aria-labelledby="alternate-title">
-      <div class="section-head">
-        <h3 id="alternate-title">候补</h3>
-        <span id="alternate-rule">至少 2 个模型选中</span>
-      </div>
-      <div id="alternate-grid" class="grid"></div>
-    </section>
-
     <section class="section" aria-labelledby="signals-title">
       <div class="section-head">
         <div>
-          <h3 id="signals-title">当日多空信号</h3>
+          <h2 id="signals-title">最近交易日全部信号</h2>
           <span id="signals-count">--</span>
         </div>
         <div class="signal-tools">
@@ -198,7 +139,7 @@
     </section>
 
     <footer class="foot">
-      <span id="frozen-at">模型名单冻结 --</span>
+      <span id="signal-date">交易日 --</span>
       <span id="signal-through">多空信号观测 --</span>
     </footer>
   </main>
@@ -237,11 +178,6 @@
       ? `¥${Number(value).toFixed(2)}` : '--';
     const sourceName = value =>
       value === 'tencent' ? '腾讯' : value === 'sina' ? '新浪' : value || '--';
-    const stateName = {
-      ready: '已就绪', empty: '无符合项',
-      waiting_selection: '等待模型名单',
-      waiting_long_signal: '等待多头信号',
-    };
     const axis = {
       axisLine: {lineStyle: {color: '#425058'}},
       axisLabel: {color: '#9ba9af'},
@@ -256,65 +192,6 @@
     let stockChart = null;
     let stockController = null;
 
-    function consensusCard(row) {
-      const signal = row.long_signal || {};
-      const modelText = (row.ballots || [])
-        .map(item => `${esc(item.name || item.model)} #${item.rank}`)
-        .join(' · ');
-      const tier = row.tier === 'primary' ? 'Top' : '候补';
-      return `<article class="stock ${row.tier === 'alternate' ? 'alt' : ''}">
-        <div class="stock-top">
-          <span class="rank">${tier}${row.tier_rank}</span>
-          <span class="name">${esc(row.name)}</span>
-          <span class="code">${esc(row.code)}</span>
-          <span class="signal up">${signal.strength === 'weak' ? '涨' : '多'}</span>
-        </div>
-        <div class="facts">
-          <div class="fact"><span>模型共识</span><b>${row.votes} 票 · ${(Number(row.vote_share) * 100).toFixed(0)}%</b></div>
-          <div class="fact"><span>首次多头</span><b>${esc(clock(signal.quote_at))}</b></div>
-          <div class="fact"><span>信号价格</span><b>${price(signal.price)}</b></div>
-          <div class="fact"><span>信号时涨跌</span><b class="${Number(signal.change) >= 0 ? 'up' : 'down'}">${pct(signal.change)}</b></div>
-          <div class="fact"><span>信号至收盘</span><b class="${Number(signal.signal_to_close) >= 0 ? 'up' : 'down'}">${pct(signal.signal_to_close)}</b></div>
-          <div class="fact"><span>收盘价 / 涨跌</span><b class="${Number(signal.close_change) >= 0 ? 'up' : 'down'}">${price(signal.close_price)} · ${pct(signal.close_change)}</b></div>
-          <div class="fact"><span>收盘状态</span><b>${signal.disappeared_at_close
-            ? '<span class="badge">多头已消失</span>'
-            : (signal.close_complete ? '多头仍在' : '盘中')}</b></div>
-        </div>
-        <p class="models">提名：${modelText || '--'}</p>
-      </article>`;
-    }
-
-    function renderConsensus() {
-      const board = DATA.board || {};
-      const policy = DATA.policy || {};
-      const rows = board.rows || [];
-      const primary = rows.filter(row => row.tier === 'primary');
-      const alternates = rows.filter(row => row.tier === 'alternate');
-      $('#board-date').textContent = board.date
-        ? `${board.date.slice(0, 4)}-${board.date.slice(4, 6)}-${board.date.slice(6)} 模型共识榜`
-        : '最近交易日模型共识榜';
-      $('#board-state').textContent = stateName[board.status] || board.status || '未知';
-      $('#board-state').classList.toggle('waiting', board.status !== 'ready');
-      $('#model-count').textContent = `${board.model_count || 0}`;
-      $('#selection-count').textContent = `${board.model_selection_count || 0}`;
-      $('#matched-count').textContent = `${board.matched_long_count || 0}`;
-      $('#board-count').textContent =
-        `${board.primary_count || 0} + ${board.alternate_count || 0}`;
-      $('#primary-rule').textContent =
-        `最多 ${policy.primary_limit || 5} 只 · 至少 ${policy.primary_min_votes || 3} 票`;
-      $('#alternate-rule').textContent =
-        `最多 ${policy.alternate_limit || 2} 只 · 至少 ${policy.alternate_min_votes || 2} 票`;
-      $('#primary-grid').innerHTML = primary.length
-        ? primary.map(consensusCard).join('')
-        : `<div class="empty">${esc(board.reason || '暂无满足条件的主榜股票')}</div>`;
-      $('#alternate-grid').innerHTML = alternates.length
-        ? alternates.map(consensusCard).join('')
-        : '<div class="empty">暂无满足条件的候补股票</div>';
-      $('#frozen-at').textContent = `模型名单冻结 ${stamp(board.frozen_at)}`;
-      $('#signal-through').textContent =
-        `多空信号观测至 ${stamp(board.signal_observed_through)}`;
-    }
-
     function filteredSignals() {
       const query = $('#signal-search').value.trim().toLowerCase();
       return (DATA.signals?.rows || []).filter(row => {
@@ -323,7 +200,6 @@
         return !query || `${row.code}${row.name}`.toLowerCase().includes(query);
       });
     }
-
     function renderSignals() {
       const rows = filteredSignals();
       const pages = Math.max(1, Math.ceil(rows.length / signalPageSize));
@@ -870,13 +746,18 @@
     }
 
     function render(data) {
-      if (data?.schema !== 'awakening-consensus-dashboard-v1'
+      if (data?.schema !== 'awakening-daily-signals-dashboard-v1'
           || !Array.isArray(data.signals?.rows)) {
         throw new Error('数据结构不兼容');
       }
       DATA = data;
       $('#generated').textContent = `快照 ${stamp(data.generated)}`;
-      renderConsensus();
+      const day = String(data.signals.date || '');
+      $('#signal-date').textContent = /^\d{8}$/.test(day)
+        ? `交易日 ${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6)}`
+        : '交易日 --';
+      $('#signal-through').textContent =
+        `多空信号观测至 ${stamp(data.signals.observed_through)}`;
       renderSignals();
     }
 
