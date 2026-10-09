@@ -923,8 +923,11 @@
             view = 'daily';
             if (!state.daily) await loadDaily(state);
             else drawDaily(state.daily);
+            const available = dates.length
+              ? dates.join('、') : '无';
             $('#chart-status').textContent =
-              `${target} 没有腾讯/新浪真实1分钟数据，已切换日K`;
+              `${target} 没有腾讯/新浪真实1分钟数据`
+              + ` · 当前可用分时：${available} · 保持日K`;
           } else {
             state.date = target;
             drawMinute(state.minute.get(target));
