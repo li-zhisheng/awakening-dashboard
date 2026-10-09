@@ -114,6 +114,7 @@
     .dialog-tabs button{border:1px solid var(--line);border-radius:5px;
       background:var(--surface2);color:var(--muted);padding:7px 14px}
     .dialog-tabs button.active{color:white;background:#245b61}
+    .dialog-tabs button:disabled{opacity:.45;cursor:not-allowed}
     .chart{height:440px;width:100%}
     .chart-status{color:var(--muted);font-size:12px;margin-top:8px}
     @media(max-width:760px){
@@ -221,13 +222,18 @@
       const match = String(value || '').match(/T(\d{2}):(\d{2}):(\d{2})/);
       return match ? `${match[1]}:${match[2]}:${match[3]}` : '--';
     };
-    const pct = value => Number.isFinite(Number(value))
+    const isNumber = value => value !== null && value !== ''
+      && Number.isFinite(Number(value));
+    const pct = value => isNumber(value)
       ? `${Number(value) >= 0 ? '+' : ''}${(Number(value) * 100).toFixed(2)}%`
       : '--';
-    const price = value => Number.isFinite(Number(value))
+    const price = value => isNumber(value)
       ? `¥${Number(value).toFixed(2)}` : '--';
     const sourceName = value =>
-      value === 'tencent' ? '腾讯' : value === 'sina' ? '新浪' : value || '--';
+      value === 'tencent' ? '腾讯'
+      : value === 'sina' ? '新浪'
+      : value === 'historical_5m_replay' ? '历史5分钟回放'
+      : value || '--';
     const signalColors = {
       strongLong:'#ef6666',weakLong:'#ef6666',
       strongShort:'#3fc28b',weakShort:'#3fc28b',
@@ -270,6 +276,48 @@
         (signalPage - 1) * signalPageSize,
         signalPage * signalPageSize);
       const summary = DATA.signals || {};
+      if (summary.mode === 'historical_replay') {
+        const filled = rows.filter(row => row.fillable).length;
+        const complete = rows.filter(row =>
+          row.fillable && !row.censored).length;
+        $('#signals-count').textContent =
+          `历史首次多头 ${summary.stock_count || 0} 只`
+          + ` · 可成交 ${filled} · 结果完整 ${complete}`
+          + ` · 当前筛选 ${rows.length}`;
+        $('#signals-table').innerHTML = `<thead><tr>
+          <th>方向</th><th>首多时间</th><th>代码</th><th>名称</th>
+          <th>首次涨跌</th><th>次5分入场</th><th>入场价</th>
+          <th>执行状态</th><th>实现净收益</th><th>最大浮盈</th>
+          <th>最大浮亏</th><th>退出</th><th>V2概率</th><th>口径</th>
+        </tr></thead><tbody>${shown.length ? shown.map(row => {
+          const completed = row.fillable && !row.censored;
+          const execution = !row.fillable
+            ? '信号未保持，现金'
+            : row.censored ? '未来路径不足' : '已成交';
+          return `<tr>
+            <td class="up">多</td>
+            <td>${esc(clock(row.quote_at))}</td>
+            <td><button class="stock-link" data-code="${esc(row.code)}">${esc(row.code)}</button></td>
+            <td><button class="stock-link" data-code="${esc(row.code)}">${esc(row.name)}</button></td>
+            <td class="${Number(row.change) >= 0 ? 'up' : 'down'}">${pct(row.change)}</td>
+            <td>${esc(clock(row.entry_at))}</td>
+            <td>${price(row.entry_price)}</td>
+            <td>${execution}</td>
+            <td class="${Number(row.realized_return) >= 0 ? 'up' : 'down'}">${completed ? pct(row.realized_return) : '--'}</td>
+            <td class="up">${completed ? pct(row.max_floating_profit) : '--'}</td>
+            <td class="down">${completed ? pct(row.max_floating_loss) : '--'}</td>
+            <td>${completed
+              ? `${esc(String(row.exit_at || '').slice(0, 10))} ${esc(row.exit_reason || '--')}`
+              : '--'}</td>
+            <td>${(Number(row.probability) * 100).toFixed(1)}%</td>
+            <td>${esc(sourceName(row.source))}</td>
+          </tr>`;
+        }).join('') : '<tr><td colspan="14" class="empty">当前筛选没有历史多头</td></tr>'}</tbody>`;
+        $('#signal-page').textContent = `${signalPage} / ${pages}`;
+        $('#signal-prev').disabled = signalPage <= 1;
+        $('#signal-next').disabled = signalPage >= pages;
+        return;
+      }
       $('#signals-count').textContent =
         `股票 ${summary.stock_count || 0} 只 · 信号 ${summary.count || 0} 条 · 多头 ${summary.long_count || 0} · 空头 ${summary.short_count || 0} · 收盘消失 ${summary.disappeared_count || 0} · 当前筛选 ${rows.length}`;
       $('#signals-table').innerHTML = `<thead><tr>
@@ -326,9 +374,11 @@
           <span class="vote">${row.votes}/${DATA.board.model_count} 票</span>
         </div>
         <div class="vote-track" aria-hidden="true"><span style="width:${share}%"></span></div>
-        <p class="signal-line">多头 ${esc(clock(signal.quote_at))} ·
-          ${price(signal.price)} ·
-          <span class="${Number(signal.change) >= 0 ? 'up' : 'down'}">${pct(signal.change)}</span>
+        <p class="signal-line">${DATA.signals?.mode === 'historical_replay'
+          ? `回放首多 ${esc(clock(signal.quote_at))} · 次5分入场 ${price(signal.entry_price)}`
+            + ` · 实现收益 <span class="${Number(signal.realized_return) >= 0 ? 'up' : 'down'}">${pct(signal.realized_return)}</span>`
+          : `多头 ${esc(clock(signal.quote_at))} · ${price(signal.price)}`
+            + ` · <span class="${Number(signal.change) >= 0 ? 'up' : 'down'}">${pct(signal.change)}</span>`}
           · Borda ${row.borda_points}</p>
         <p class="ballots">${ballots || '--'}</p>
       </article>`;
@@ -337,13 +387,21 @@
     function renderConsensus() {
       const board = DATA.board || {};
       const policy = DATA.policy || {};
+      const replay = DATA.signals?.mode === 'historical_replay';
       const ready = board.status === 'ready';
       const primary = ready && Array.isArray(board.primary) ? board.primary : [];
       const alternates = ready && Array.isArray(board.alternates)
         ? board.alternates : [];
+      $('#consensus-title').textContent = replay
+        ? '模型技术 Top5 回放 × 历史首次多头'
+        : '模型共识 × 当日多头信号';
       $('#consensus-count').textContent = ready
         ? `主榜 ${primary.length} 只 · 候补 ${alternates.length} 只`
-        : '等待同日模型最终名单与多头信号';
+        : replay
+          ? (board.reason === 'model_replay_out_of_range'
+            ? '该日没有年度模型 Top5 回放'
+            : `模型 Top5 不完整（${board.model_count || 0}/${board.expected_model_count || 12}）`)
+          : '等待同日模型最终名单与多头信号';
       $('#board-summary').innerHTML = ready
         ? `<span>模型 <strong>${board.model_count}</strong></span>
           <span>交集候选 <strong>${board.candidate_count}</strong></span>
@@ -354,16 +412,23 @@
         ? (primary.length
           ? primary.map(row => consensusCard(row, 'primary')).join('')
           : '<div class="empty">当天没有股票同时达到主榜共识和多头信号门槛</div>')
-        : '<div class="empty">同日数据尚未完整冻结</div>';
+        : `<div class="empty">${replay
+          ? '历史模型名单不完整，已关闭当日共识计算'
+          : '同日数据尚未完整冻结'}</div>`;
       $('#alternate-grid').innerHTML = ready
         ? (alternates.length
           ? alternates.map(row => consensusCard(row, 'alternate')).join('')
           : '<div class="empty">当天没有达到候补门槛的交集股票</div>')
-        : '<div class="empty">同日数据尚未完整冻结</div>';
-      $('#consensus-policy').textContent =
-        `每模型最终 Top${policy.vote_limit_per_strategy || 10}`
-        + ` ∩ 当日多头 · 主榜≥${policy.primary_min_votes || 3}票`
-        + ` · 候补≥${policy.alternate_min_votes || 2}票`;
+        : `<div class="empty">${replay
+          ? '缺失日期不使用部分模型投票'
+          : '同日数据尚未完整冻结'}</div>`;
+      $('#consensus-policy').textContent = replay
+        ? `历史技术 Top${policy.vote_limit_per_strategy || 5} 回放`
+          + ` ∩ 首次正式5分钟多头 · 主榜≥${policy.primary_min_votes || 3}票`
+          + ` · 候补≥${policy.alternate_min_votes || 2}票 · 非实盘竞价确认`
+        : `每模型最终 Top${policy.vote_limit_per_strategy || 10}`
+          + ` ∩ 当日多头 · 主榜≥${policy.primary_min_votes || 3}票`
+          + ` · 候补≥${policy.alternate_min_votes || 2}票`;
     }
 
     function parseMinute(
@@ -609,10 +674,12 @@
     function drawDaily(data) {
       const rows = data.bars;
       const dates = rows.map(row => row.date);
+      const replay = DATA.signals?.mode === 'historical_replay';
       const currentMarks = stockState.signals.map(row => ({
         date:row.quote_at.slice(0,10),direction:row.direction,
-        strength:row.strength,probability:row.probability,
-        price:Number(row.qfq_price),time:clock(row.quote_at),live:true,
+        strength:row.strength === 'replay' ? 'strong' : row.strength,
+        probability:row.probability,price:Number(row.qfq_price),
+        time:clock(row.quote_at),live:!replay,replay,
       }));
       const seen = new Set(currentMarks.map(row =>
         `${row.date}/${row.direction}/${row.strength}`));
@@ -631,21 +698,21 @@
           ? (strong ? signalColors.strongLong : signalColors.weakLong)
           : (strong ? signalColors.strongShort : signalColors.weakShort);
         const mark = {
-          name:row.live ? `盘中首${label}` : label,
+          name:row.replay ? `历史首${label}` : row.live ? `盘中首${label}` : label,
           coord:[index,long ? rows[index].low : rows[index].high],
           value:label,
-          symbol:row.live ? 'diamond' : 'circle',
-          symbolSize:row.live ? 22 : (strong ? 28 : 22),
+          symbol:row.live || row.replay ? 'diamond' : 'circle',
+          symbolSize:row.live || row.replay ? 22 : (strong ? 28 : 22),
           itemStyle:{
             color,borderColor:'#101619',
-            borderWidth:row.live ? 2 : (strong ? 2 : 1),
+            borderWidth:row.live || row.replay ? 2 : (strong ? 2 : 1),
             opacity:strong ? 1 : .9,
           },
           label:{show:true,color:'#ffffff',
-            fontSize:row.live ? 9 : (strong ? 11 : 9),
+            fontSize:row.live || row.replay ? 9 : (strong ? 11 : 9),
             fontWeight:700,formatter:label},
         };
-        if (!row.live) {
+        if (!row.live && !row.replay) {
           mark.symbolOffset = [0,long?'68%':'-68%'];
         }
         return [mark];
@@ -703,6 +770,7 @@
       },true);
       stockChart.off('click');
       stockChart.on('click', params => {
+        if (replay) return;
         if (params.seriesType !== 'candlestick'
             || params.seriesName !== '日K') return;
         const date = dates[params.dataIndex];
@@ -818,6 +886,9 @@
       const state = stockState;
       if (!state) return;
       try {
+        if (DATA.signals?.mode === 'historical_replay' && view === 'minute') {
+          view = 'daily';
+        }
         if (view === 'minute') {
           state.view = 'minute';
           if (!state.minute) await loadMinute(state, requestedDate);
@@ -857,10 +928,17 @@
       const signals = stockSignals(code);
       if (!signals.length) return;
       const summary = signals[0];
-      stockState = {code,name:signals[0].name,signals,view:'minute',
+      const replay = DATA.signals?.mode === 'historical_replay';
+      stockState = {code,name:signals[0].name,signals,view:replay?'daily':'minute',
         minute:null,daily:null,date:summary.quote_at.slice(0,10)};
       $('#stock-title').textContent = signals[0].name;
-      const signalText = signals.map(row => {
+      const signalText = replay ? signals.map(row =>
+        `历史首多 ${esc(clock(row.quote_at))}`
+        + ` · 次5分入场 ${price(row.entry_price)}`
+        + ` · 实现净收益 ${pct(row.realized_return)}`
+        + ` · 最大浮盈 ${pct(row.max_floating_profit)}`
+        + ` · 最大浮亏 ${pct(row.max_floating_loss)}`
+      ).join('　') : signals.map(row => {
         const label = row.direction === 1 ? '多头' : '空头';
         const vanished = row.disappeared_at_close
           ? ` <span class="badge">${label}收盘消失</span>` : '';
@@ -868,14 +946,17 @@
           + `（信号时 ${pct(row.change)}，至收盘 ${pct(row.signal_to_close)}）`
           + vanished;
       }).join('　');
-      $('#stock-code').innerHTML =
-        `<strong>${esc(code)}</strong> · ${signalText}<br>`
-        + `收盘 ${price(summary.close_price)}（${pct(summary.close_change)}）`
-        + `　最高 ${price(summary.high)}　最低 ${price(summary.low)}`
-        + `　最大涨幅 ${pct(summary.max_rise)}　最大跌幅 ${pct(summary.max_decline)}`;
+      $('#stock-code').innerHTML = replay
+        ? `<strong>${esc(code)}</strong> · ${signalText}<br>`
+          + '历史5分钟回放，非真实1分钟实盘证据'
+        : `<strong>${esc(code)}</strong> · ${signalText}<br>`
+          + `收盘 ${price(summary.close_price)}（${pct(summary.close_change)}）`
+          + `　最高 ${price(summary.high)}　最低 ${price(summary.low)}`
+          + `　最大涨幅 ${pct(summary.max_rise)}　最大跌幅 ${pct(summary.max_decline)}`;
+      $('#minute-tab').disabled = replay;
       if (!$('#stock-dialog').open) $('#stock-dialog').showModal();
       if (!stockChart) stockChart = echarts.init($('#stock-chart'));
-      setStockView('minute', stockState.date);
+      setStockView(replay ? 'daily' : 'minute', stockState.date);
     }
 
     function dayLabel(day) {
@@ -911,7 +992,9 @@
         ? `交易日 ${dayLabel(day)}`
         : '交易日 --';
       $('#signal-through').textContent =
-        `多空信号观测至 ${stamp(data.signals.observed_through)}`;
+        data.signals.mode === 'historical_replay'
+          ? `历史5分钟回放 · 非1分钟实盘证据 · 首次多头至 ${stamp(data.signals.observed_through)}`
+          : `多空信号观测至 ${stamp(data.signals.observed_through)}`;
       renderDateSelector(data, day);
       renderConsensus();
       renderSignals();
