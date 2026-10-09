@@ -534,13 +534,15 @@
           name: long ? '多' : '空',
           coord: [at, chartPrice],
           value: `${long ? '多' : '空'} ${clock(row.quote_at)} ${price(row.price)}`,
-          symbol: 'circle', symbolSize: 18,
+          symbol: 'circle', symbolSize: 10,
           symbolOffset: [0, long ? '-55%' : '55%'],
-          itemStyle: {color: long ? '#ef6666' : '#3fc28b'},
+          itemStyle: {color: long ? '#ef6666' : '#3fc28b',
+            borderColor:'#101619',borderWidth:1},
           label: {show: true, position: long ? 'top' : 'bottom',
+            distance:8,fontSize:9,
             color: long ? '#ef6666' : '#3fc28b',
             backgroundColor: 'rgba(13,17,19,.92)',borderRadius: 3,
-            padding: [3,5],formatter: `${long ? '多' : '空'}\n${clock(row.quote_at)}\n${price(row.price)}`},
+            padding: [2,3],formatter: `${long ? '多' : '空'}\n${clock(row.quote_at)}\n${price(row.price)}`},
         }];
       });
     }
