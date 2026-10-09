@@ -506,6 +506,49 @@
       });
     }
 
+    function parseArchivedMinute(payload, code, date, daily) {
+      if (payload?.schema !== 'awakening-minute-archive-stock-v1'
+          || payload.code !== code || payload.date !== date.replaceAll('-', '')
+          || payload.frequency !== '1m' || !Array.isArray(payload.points)
+          || payload.points.length < 200) {
+        throw new Error('SuperMind分钟归档不完整');
+      }
+      const previousClose = dailyPreviousClose(daily, date);
+      const targetClose = dailyClose(daily, date);
+      const rawClose = Number(payload.points.at(-1)?.[4]);
+      if (!Number.isFinite(previousClose) || previousClose <= 0
+          || !Number.isFinite(targetClose) || targetClose <= 0
+          || !Number.isFinite(rawClose) || rawClose <= 0) {
+        throw new Error('SuperMind分钟归档缺少日K复权基准');
+      }
+      const factor = targetClose / rawClose;
+      let cumulativeVolume = 0;
+      let cumulativeAmount = 0;
+      const points = payload.points.map(row => {
+        const time = String(row?.[0] || '');
+        const close = Number(row?.[4]);
+        const volume = Number(row?.[5]);
+        const amount = Number(row?.[6]);
+        if (!/^\d{4}$/.test(time) || !Number.isFinite(close) || close <= 0
+            || !Number.isFinite(volume) || volume < 0
+            || !Number.isFinite(amount) || amount < 0) return null;
+        cumulativeVolume += volume;
+        cumulativeAmount += amount;
+        return [
+          time,close * factor,volume,
+          cumulativeVolume > 0
+            ? cumulativeAmount / cumulativeVolume * factor : null,
+        ];
+      }).filter(Boolean);
+      if (points.length < 200) {
+        throw new Error('SuperMind分钟归档有效分钟不足');
+      }
+      return {
+        date,previousClose,points,
+        source:'SuperMind真实1分钟归档',
+      };
+    }
+
     function parseDaily(payload, symbol) {
       const rows = payload?.data?.[symbol]?.qfqday;
       if (payload?.code !== 0 || !Array.isArray(rows) || !rows.length) {
@@ -778,18 +821,16 @@
         ],
       },true);
       clearDailyChartClick();
-      if (!replay) {
-        dailyChartClick = event => {
-          const point = [event.offsetX, event.offsetY];
-          if (!stockChart.containPixel({gridIndex:0}, point)) return;
-          const value = stockChart.convertFromPixel(
-            {seriesIndex:0}, point);
-          const index = Math.round(Number(value?.[0]));
-          const date = dates[index];
-          if (date) setStockView('minute', date);
-        };
-        stockChart.getZr().on('click', dailyChartClick);
-      }
+      dailyChartClick = event => {
+        const point = [event.offsetX, event.offsetY];
+        if (!stockChart.containPixel({gridIndex:0}, point)) return;
+        const value = stockChart.convertFromPixel(
+          {seriesIndex:0}, point);
+        const index = Math.round(Number(value?.[0]));
+        const date = dates[index];
+        if (date) setStockView('minute', date);
+      };
+      stockChart.getZr().on('click', dailyChartClick);
       const strongCount = allMarks.filter(row =>
         row.strength !== 'weak').length;
       const weakCount = allMarks.length - strongCount;
@@ -828,7 +869,8 @@
     }
 
     async function loadMinute(state, requestedDate = '') {
-      $('#chart-status').textContent = '正在读取腾讯/新浪真实1分钟行情';
+      $('#chart-status').textContent =
+        '正在读取SuperMind归档或腾讯/新浪真实1分钟行情';
       const symbol = `${state.code.startsWith('6') ? 'sh' : 'sz'}${state.code}`;
       const days = new Map(state.minute || []);
       try {
@@ -847,6 +889,23 @@
           await loadDaily(state, false, 'minute');
         }
         if (stockState !== state || state.view !== 'minute') return;
+        const base = String(DATA.minute_archive?.base_url || '')
+          .replace(/\/+$/, '');
+        if (requestedDate && base) {
+          const compact = requestedDate.replaceAll('-', '');
+          try {
+            const payload = await requestStockJson(
+              `${base}/days/${compact}/${state.code.slice(0,2)}/${state.code}.json`,
+              state, 'minute');
+            if (payload) {
+              const archived = parseArchivedMinute(
+                payload, state.code, requestedDate, state.daily);
+              days.set(archived.date, archived);
+            }
+          } catch (_) {}
+        }
+      }
+      if (!requestedDate || !days.has(requestedDate)) {
         try {
           const payload = await requestStockJson(
             `https://web.ifzq.gtimg.cn/appstock/app/day/query?code=${symbol}&_=${Date.now()}`,
@@ -905,19 +964,17 @@
       const state = stockState;
       if (!state) return;
       try {
-        if (DATA.signals?.mode === 'historical_replay' && view === 'minute') {
-          view = 'daily';
-        }
         if (view === 'minute') {
+          const targetDate = requestedDate || state.date;
           state.view = 'minute';
           if (
               !state.minute
-              || (requestedDate && !state.minute.has(requestedDate))) {
-            await loadMinute(state, requestedDate);
+              || (targetDate && !state.minute.has(targetDate))) {
+            await loadMinute(state, targetDate);
           }
           if (stockState !== state) return;
           const dates = [...state.minute.keys()].sort();
-          const target = requestedDate || state.date || dates.at(-1);
+          const target = targetDate || dates.at(-1);
           if (!state.minute.has(target)) {
             state.view = 'daily';
             view = 'daily';
@@ -926,7 +983,7 @@
             const available = dates.length
               ? dates.join('、') : '无';
             $('#chart-status').textContent =
-              `${target} 没有腾讯/新浪真实1分钟数据`
+              `${target} 没有SuperMind归档或腾讯/新浪真实1分钟数据`
               + ` · 当前可用分时：${available} · 保持日K`;
           } else {
             state.date = target;
@@ -979,7 +1036,7 @@
           + `收盘 ${price(summary.close_price)}（${pct(summary.close_change)}）`
           + `　最高 ${price(summary.high)}　最低 ${price(summary.low)}`
           + `　最大涨幅 ${pct(summary.max_rise)}　最大跌幅 ${pct(summary.max_decline)}`;
-      $('#minute-tab').disabled = replay;
+      $('#minute-tab').disabled = false;
       if (!$('#stock-dialog').open) $('#stock-dialog').showModal();
       if (!stockChart) stockChart = echarts.init($('#stock-chart'));
       setStockView(replay ? 'daily' : 'minute', stockState.date);
