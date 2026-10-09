@@ -829,6 +829,10 @@
         }
       } catch (_) {}
       if (!requestedDate || !days.has(requestedDate)) {
+        if (!state.daily) {
+          await loadDaily(state, false, 'minute');
+        }
+        if (stockState !== state || state.view !== 'minute') return;
         try {
           const payload = await requestStockJson(
             `https://web.ifzq.gtimg.cn/appstock/app/day/query?code=${symbol}&_=${Date.now()}`,
@@ -853,7 +857,8 @@
       state.minute = days;
     }
 
-    async function loadDaily(state) {
+    async function loadDaily(
+        state, draw = true, expectedView = 'daily') {
       $('#chart-status').textContent = '正在读取腾讯前复权日K';
       const symbol = `${state.code.startsWith('6') ? 'sh' : 'sz'}${state.code}`;
       const param = encodeURIComponent(`${symbol},day,,,120,qfq`);
@@ -871,15 +876,15 @@
       try {
         const payload = await requestStockJson(
           `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${param}&_=${Date.now()}`,
-          state, 'daily');
+          state, expectedView);
         if (payload) online = parseDaily(payload, symbol);
       } catch (error) {
         if (!published) throw error;
       }
-      if (stockState !== state || state.view !== 'daily') return;
+      if (stockState !== state || state.view !== expectedView) return;
       state.daily = mergeDaily(online, published);
       if (!state.daily) throw new Error('日K数据不可用');
-      drawDaily(state.daily);
+      if (draw) drawDaily(state.daily);
     }
 
     async function setStockView(view, requestedDate = '') {
