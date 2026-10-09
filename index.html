@@ -394,8 +394,8 @@
       const alternates = ready && Array.isArray(board.alternates)
         ? board.alternates : [];
       $('#consensus-title').textContent = replay
-        ? '模型技术 Top5 回放 × 历史首次多头'
-        : '模型共识 × 当日多头信号';
+        ? '前日模型 Top5 × 次日早盘多头'
+        : '09:25模型共识 × 早盘多头';
       $('#consensus-count').textContent = ready
         ? `主榜 ${primary.length} 只 · 候补 ${alternates.length} 只`
         : replay
@@ -425,11 +425,11 @@
           : '同日数据尚未完整冻结'}</div>`;
       $('#consensus-policy').textContent = replay
         ? `历史技术 Top${policy.vote_limit_per_strategy || 5} 回放`
-          + ` ∩ 首次正式5分钟多头 · 主榜≥${policy.primary_min_votes || 2}票`
-          + ` · 候补≥${policy.alternate_min_votes || 1}票 · 非实盘竞价确认`
+          + ` ∩ 09:30–10:00首次多头 · 主榜≥${policy.primary_min_votes || 2}票`
+          + ` · 候补≥${policy.alternate_min_votes || 1}票 · PM历史模型不可用`
         : `每模型最终 Top${policy.vote_limit_per_strategy || 10}`
-          + ` ∩ 当日多头 · 主榜≥${policy.primary_min_votes || 2}票`
-          + ` · 候补≥${policy.alternate_min_votes || 1}票`;
+          + ` ∩ 09:30–10:00多头 · 主榜≥${policy.primary_min_votes || 2}票`
+          + ` · 候补≥${policy.alternate_min_votes || 1}票 · PM批次未开放`;
     }
 
     function parseMinute(
