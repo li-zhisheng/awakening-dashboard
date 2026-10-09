@@ -259,6 +259,7 @@
     let stockState = null;
     let stockChart = null;
     let stockController = null;
+    let dailyChartClick = null;
 
     function filteredSignals() {
       const query = $('#signal-search').value.trim().toLowerCase();
@@ -612,7 +613,15 @@
       });
     }
 
+    function clearDailyChartClick() {
+      if (stockChart && dailyChartClick) {
+        stockChart.getZr().off('click', dailyChartClick);
+      }
+      dailyChartClick = null;
+    }
+
     function drawMinute(data) {
+      clearDailyChartClick();
       const points = data.points;
       const times = points.map(row => `${row[0].slice(0,2)}:${row[0].slice(2)}`);
       const values = points.map(row => row[1]);
@@ -768,14 +777,19 @@
               row.close>=row.open?'rgba(239,102,102,.58)':'rgba(63,194,139,.58)'}}))},
         ],
       },true);
-      stockChart.off('click');
-      stockChart.on('click', params => {
-        if (replay) return;
-        if (params.seriesType !== 'candlestick'
-            || params.seriesName !== '日K') return;
-        const date = dates[params.dataIndex];
-        if (date) setStockView('minute', date);
-      });
+      clearDailyChartClick();
+      if (!replay) {
+        dailyChartClick = event => {
+          const point = [event.offsetX, event.offsetY];
+          if (!stockChart.containPixel({gridIndex:0}, point)) return;
+          const value = stockChart.convertFromPixel(
+            {seriesIndex:0}, point);
+          const index = Math.round(Number(value?.[0]));
+          const date = dates[index];
+          if (date) setStockView('minute', date);
+        };
+        stockChart.getZr().on('click', dailyChartClick);
+      }
       const strongCount = allMarks.filter(row =>
         row.strength !== 'weak').length;
       const weakCount = allMarks.length - strongCount;
@@ -816,7 +830,7 @@
     async function loadMinute(state, requestedDate = '') {
       $('#chart-status').textContent = '正在读取腾讯/新浪真实1分钟行情';
       const symbol = `${state.code.startsWith('6') ? 'sh' : 'sz'}${state.code}`;
-      const days = new Map();
+      const days = new Map(state.minute || []);
       try {
         const response = await fetch(
           `live/${state.code.slice(0,2)}/${state.code}.json`,
@@ -896,7 +910,11 @@
         }
         if (view === 'minute') {
           state.view = 'minute';
-          if (!state.minute) await loadMinute(state, requestedDate);
+          if (
+              !state.minute
+              || (requestedDate && !state.minute.has(requestedDate))) {
+            await loadMinute(state, requestedDate);
+          }
           if (stockState !== state) return;
           const dates = [...state.minute.keys()].sort();
           const target = requestedDate || state.date || dates.at(-1);
@@ -1095,6 +1113,7 @@
       stockController?.abort();
       stockController = null;
       stockState = null;
+      dailyChartClick = null;
       stockChart?.dispose();
       stockChart = null;
     });
