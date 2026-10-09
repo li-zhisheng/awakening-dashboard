@@ -425,11 +425,11 @@
           : '同日数据尚未完整冻结'}</div>`;
       $('#consensus-policy').textContent = replay
         ? `历史技术 Top${policy.vote_limit_per_strategy || 5} 回放`
-          + ` ∩ 首次正式5分钟多头 · 主榜≥${policy.primary_min_votes || 3}票`
-          + ` · 候补≥${policy.alternate_min_votes || 2}票 · 非实盘竞价确认`
+          + ` ∩ 首次正式5分钟多头 · 主榜≥${policy.primary_min_votes || 2}票`
+          + ` · 候补≥${policy.alternate_min_votes || 1}票 · 非实盘竞价确认`
         : `每模型最终 Top${policy.vote_limit_per_strategy || 10}`
-          + ` ∩ 当日多头 · 主榜≥${policy.primary_min_votes || 3}票`
-          + ` · 候补≥${policy.alternate_min_votes || 2}票`;
+          + ` ∩ 当日多头 · 主榜≥${policy.primary_min_votes || 2}票`
+          + ` · 候补≥${policy.alternate_min_votes || 1}票`;
     }
 
     function parseMinute(
