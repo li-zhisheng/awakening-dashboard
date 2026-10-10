@@ -401,6 +401,13 @@
     }
 
     function parseArchivedMinute(payload, code, date, daily) {
+      const compact = date.replaceAll('-', '');
+      if (payload?.schema === 'awakening-minute-archive-month-v1') {
+        if (payload.code !== code || payload.month !== compact.slice(0, 6)) {
+          throw new Error('SuperMind月度分钟归档不匹配');
+        }
+        payload = (payload.days || []).find(day => day.date === compact);
+      }
       if (payload?.schema !== 'awakening-minute-archive-stock-v1'
           || payload.code !== code || payload.date !== date.replaceAll('-', '')
           || payload.frequency !== '1m' || !Array.isArray(payload.points)
@@ -799,6 +806,9 @@
       } catch (_) {}
       if (!requestedDate || !days.has(requestedDate)) {
         if (!state.daily) {
+          await loadPublishedDaily(state);
+        }
+        if (!state.daily) {
           await loadDaily(state, false, 'minute');
         }
         if (stockState !== state || state.view !== 'minute') return;
@@ -806,10 +816,15 @@
           .replace(/\/+$/, '');
         if (requestedDate && base) {
           const compact = requestedDate.replaceAll('-', '');
-          for (const extension of ['.json.gz', '.json']) {
+          const paths = [
+            `${base}/months/${compact.slice(0, 6)}/${state.code.slice(0,2)}/${state.code}.json.gz`,
+            `${base}/days/${compact}/${state.code.slice(0,2)}/${state.code}.json.gz`,
+            `${base}/days/${compact}/${state.code.slice(0,2)}/${state.code}.json`,
+          ];
+          for (const path of paths) {
             try {
               const payload = await requestStockJson(
-                `${base}/days/${compact}/${state.code.slice(0,2)}/${state.code}${extension}`,
+                path,
                 state, 'minute');
               if (payload) {
                 const archived = parseArchivedMinute(
@@ -844,6 +859,18 @@
       }
       if (!days.size) throw new Error('没有腾讯/新浪真实1分钟数据');
       state.minute = days;
+    }
+
+    async function loadPublishedDaily(state) {
+      try {
+        const response = await fetch(
+          `stocks/${state.code.slice(0,2)}/${state.code}.json`,
+          {cache:'no-cache'});
+        if (!response.ok) return;
+        const published = parsePublishedDaily(
+          await response.json(), state.code);
+        if (stockState === state) state.daily = published;
+      } catch (_) {}
     }
 
     async function loadDaily(
