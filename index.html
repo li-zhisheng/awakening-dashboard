@@ -886,8 +886,13 @@
       stockController = controller;
       const timeout = setTimeout(() => controller.abort(), 10000);
       try {
+        const immutableArchive = (
+          url.includes('/awakening-minute-archive/')
+          && url.endsWith('.json.gz')
+        );
         const response = await fetch(url, {
-          cache:'no-store',credentials:'omit',signal:controller.signal,
+          cache:immutableArchive ? 'force-cache' : 'no-store',
+          credentials:'omit',signal:controller.signal,
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await responseJson(response, url);
