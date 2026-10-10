@@ -866,6 +866,20 @@
         + ' · 点击K线查看对应日期分时（仅真实1分钟留存日可用）';
     }
 
+    async function responseJson(response, url) {
+      if (!url.endsWith('.gz')) return response.json();
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) {
+        return JSON.parse(new TextDecoder().decode(bytes));
+      }
+      if (typeof DecompressionStream !== 'function') {
+        throw new Error('浏览器不支持gzip分钟归档');
+      }
+      const stream = new Blob([bytes]).stream()
+        .pipeThrough(new DecompressionStream('gzip'));
+      return new Response(stream).json();
+    }
+
     async function requestStockJson(url, state, view) {
       stockController?.abort();
       const controller = new AbortController();
@@ -876,7 +890,7 @@
           cache:'no-store',credentials:'omit',signal:controller.signal,
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const payload = await response.json();
+        const payload = await responseJson(response, url);
         return stockState === state && state.view === view ? payload : null;
       } finally {
         clearTimeout(timeout);
@@ -919,16 +933,19 @@
           .replace(/\/+$/, '');
         if (requestedDate && base) {
           const compact = requestedDate.replaceAll('-', '');
-          try {
-            const payload = await requestStockJson(
-              `${base}/days/${compact}/${state.code.slice(0,2)}/${state.code}.json`,
-              state, 'minute');
-            if (payload) {
-              const archived = parseArchivedMinute(
-                payload, state.code, requestedDate, state.daily);
-              days.set(archived.date, archived);
-            }
-          } catch (_) {}
+          for (const extension of ['.json.gz', '.json']) {
+            try {
+              const payload = await requestStockJson(
+                `${base}/days/${compact}/${state.code.slice(0,2)}/${state.code}${extension}`,
+                state, 'minute');
+              if (payload) {
+                const archived = parseArchivedMinute(
+                  payload, state.code, requestedDate, state.daily);
+                days.set(archived.date, archived);
+                break;
+              }
+            } catch (_) {}
+          }
         }
       }
       if (!requestedDate || !days.has(requestedDate)) {
