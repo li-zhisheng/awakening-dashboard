@@ -217,6 +217,8 @@
     };
     let DATA = null;
     const DATE_CACHE = new Map();
+    const ARCHIVE_CACHE = new Map();
+    const PUBLISHED_DAILY_CACHE = new Map();
     let activeDate = '';
     let etag = '';
     let direction = 'all';
@@ -756,21 +758,31 @@
     }
 
     async function requestStockJson(url, state, view) {
+      const immutableArchive = (
+        url.includes('/awakening-minute-archive/')
+        && url.endsWith('.json.gz')
+      );
+      if (immutableArchive && ARCHIVE_CACHE.has(url)) {
+        return stockState === state && state.view === view
+          ? ARCHIVE_CACHE.get(url) : null;
+      }
       stockController?.abort();
       const controller = new AbortController();
       stockController = controller;
       const timeout = setTimeout(() => controller.abort(), 10000);
       try {
-        const immutableArchive = (
-          url.includes('/awakening-minute-archive/')
-          && url.endsWith('.json.gz')
-        );
         const response = await fetch(url, {
           cache:immutableArchive ? 'force-cache' : 'no-store',
           credentials:'omit',signal:controller.signal,
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await responseJson(response, url);
+        if (immutableArchive) {
+          ARCHIVE_CACHE.set(url, payload);
+          if (ARCHIVE_CACHE.size > 32) {
+            ARCHIVE_CACHE.delete(ARCHIVE_CACHE.keys().next().value);
+          }
+        }
         return stockState === state && state.view === view ? payload : null;
       } finally {
         clearTimeout(timeout);
@@ -862,6 +874,10 @@
     }
 
     async function loadPublishedDaily(state) {
+      if (PUBLISHED_DAILY_CACHE.has(state.code)) {
+        state.daily = PUBLISHED_DAILY_CACHE.get(state.code);
+        return;
+      }
       try {
         const response = await fetch(
           `stocks/${state.code.slice(0,2)}/${state.code}.json`,
@@ -869,6 +885,11 @@
         if (!response.ok) return;
         const published = parsePublishedDaily(
           await response.json(), state.code);
+        PUBLISHED_DAILY_CACHE.set(state.code, published);
+        if (PUBLISHED_DAILY_CACHE.size > 256) {
+          PUBLISHED_DAILY_CACHE.delete(
+            PUBLISHED_DAILY_CACHE.keys().next().value);
+        }
         if (stockState === state) state.daily = published;
       } catch (_) {}
     }
@@ -878,16 +899,10 @@
       $('#chart-status').textContent = '正在读取腾讯前复权日K';
       const symbol = `${state.code.startsWith('6') ? 'sh' : 'sz'}${state.code}`;
       const param = encodeURIComponent(`${symbol},day,,,120,qfq`);
-      let published = null;
-      try {
-        const response = await fetch(
-          `stocks/${state.code.slice(0,2)}/${state.code}.json`,
-          {cache:'no-cache'});
-        if (response.ok) {
-          published = parsePublishedDaily(
-            await response.json(), state.code);
-        }
-      } catch (_) {}
+      if (!PUBLISHED_DAILY_CACHE.has(state.code)) {
+        await loadPublishedDaily(state);
+      }
+      const published = PUBLISHED_DAILY_CACHE.get(state.code) || null;
       let online = null;
       try {
         const payload = await requestStockJson(
