@@ -64,7 +64,7 @@
     .segmented button:last-child{border-right:0}
     .segmented button.active{background:#245b61;color:white}
     .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:6px}
-    table{width:100%;border-collapse:collapse;min-width:1420px}
+    table{width:100%;border-collapse:collapse;min-width:1640px}
     th,td{padding:10px 12px;border-bottom:1px solid #283238;text-align:right;
       white-space:nowrap;font-variant-numeric:tabular-nums}
     th{position:sticky;top:0;background:#172024;color:var(--muted);font-size:12px}
@@ -287,16 +287,20 @@
         $('#signal-next').disabled = signalPage >= pages;
         return;
       }
+      const dailyReturn = summary.daily_return || {};
       $('#signals-count').textContent =
         `股票 ${summary.stock_count || 0} 只 · 信号 ${summary.count || 0} 条 · 多头 ${summary.long_count || 0} · 空头 ${summary.short_count || 0} · 收盘消失 ${summary.disappeared_count || 0} · 当前筛选 ${rows.length}`;
+      $('#signals-count').textContent +=
+        ` · 全天总收益 ${pct(dailyReturn.daily_total_return)}`;
       $('#signals-table').innerHTML = `<thead><tr>
         <th>方向</th><th>时间</th><th>代码</th><th>名称</th>
         <th>强度</th><th>信号价</th><th>信号时涨跌</th>
-        <th>收盘价</th><th>收盘涨跌</th><th>信号至收盘</th>
+        <th>收盘价</th><th>收盘涨跌</th><th>信号至收盘</th><th>全天收益</th>
         <th>最高 / 最低</th><th>最大涨 / 跌</th><th>收盘状态</th>
-        <th>概率</th><th>行业/板块</th><th>来源</th>
+        <th>规则</th><th>概率</th><th>行业/板块</th><th>来源</th>
       </tr></thead><tbody>${shown.length ? shown.map(row => {
         const long = row.direction === 1;
+        const exitRule = DATA.exit_rules?.[0]?.label || '--';
         return `<tr class="${row.disappeared_at_close ? 'vanished' : ''}">
           <td class="${long ? 'up' : 'down'}">${long ? '多' : '空'}</td>
           <td>${esc(clock(row.quote_at))}</td>
@@ -308,16 +312,18 @@
           <td>${price(row.close_price)}</td>
           <td class="${Number(row.close_change) >= 0 ? 'up' : 'down'}">${pct(row.close_change)}</td>
           <td class="${Number(row.signal_to_close) >= 0 ? 'up' : 'down'}">${pct(row.signal_to_close)}</td>
+          <td class="${Number(row.daily_total_return) >= 0 ? 'up' : 'down'}">${pct(row.daily_total_return)}</td>
           <td>${price(row.high)} / ${price(row.low)}</td>
           <td><span class="up">${pct(row.max_rise)}</span> / <span class="down">${pct(row.max_decline)}</span></td>
           <td>${row.disappeared_at_close
             ? `<span class="badge">${long ? '多头' : '空头'}已消失</span>`
             : (row.close_complete ? `${long ? '多头' : '空头'}仍在` : '盘中')}</td>
+          <td>${esc(row.return_rule || '--')} · ${esc(exitRule)}（${row.exit_rule_triggered ? '命中' : '未命中'}）</td>
           <td>${(Number(row.probability) * 100).toFixed(1)}%</td>
           <td>${esc(String(row.industry || '').replace(/^[A-Z]\d{2}/, '') || '--')}</td>
           <td>${esc(sourceName(row.source))}</td>
         </tr>`;
-      }).join('') : '<tr><td colspan="16" class="empty">当前筛选没有信号</td></tr>'}</tbody>`;
+      }).join('') : '<tr><td colspan="18" class="empty">当前筛选没有信号</td></tr>'}</tbody>`;
       $('#signal-page').textContent = `${signalPage} / ${pages}`;
       $('#signal-prev').disabled = signalPage <= 1;
       $('#signal-next').disabled = signalPage >= pages;
