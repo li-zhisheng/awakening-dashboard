@@ -759,7 +759,7 @@
 
     async function requestStockJson(url, state, view) {
       const immutableArchive = (
-        url.includes('/awakening-minute-archive/')
+        url.includes('/awakening-minute-archive')
         && url.endsWith('.json.gz')
       );
       if (immutableArchive && ARCHIVE_CACHE.has(url)) {
@@ -824,12 +824,16 @@
           await loadDaily(state, false, 'minute');
         }
         if (stockState !== state || state.view !== 'minute') return;
-        const base = String(DATA.minute_archive?.base_url || '')
-          .replace(/\/+$/, '');
-        if (requestedDate && base) {
+        if (requestedDate) {
           const compact = requestedDate.replaceAll('-', '');
+          const month = compact.slice(0, 6);
+          const routed = DATA.minute_archive?.month_base_urls?.[month];
+          const base = String(
+            routed || DATA.minute_archive?.base_url || ''
+          ).replace(/\/+$/, '');
+          if (!base) return;
           const paths = [
-            `${base}/months/${compact.slice(0, 6)}/${state.code.slice(0,2)}/${state.code}.json.gz`,
+            `${base}/months/${month}/${state.code.slice(0,2)}/${state.code}.json.gz`,
             `${base}/days/${compact}/${state.code.slice(0,2)}/${state.code}.json.gz`,
             `${base}/days/${compact}/${state.code.slice(0,2)}/${state.code}.json`,
           ];
