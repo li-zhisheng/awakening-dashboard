@@ -625,8 +625,8 @@
         }},
         legend: {top: 0, right: 8, textStyle: {color: '#9ba9af'}},
         grid: [
-          {left: 62, right: 18, top: 54, height: '55%'},
-          {left: 62, right: 18, top: '76%', height: '13%'},
+          {left: 62, right: 18, top: 54, height: '48%'},
+          {left: 62, right: 18, top: '70%', height: '20%'},
         ],
         xAxis: [
           {...axis,type:'category',data:times,boundaryGap:false,
@@ -650,6 +650,7 @@
           {name:'均价',type:'line',data:averages,showSymbol:false,
             lineStyle:{color:'#e4b95c',width:1.3},itemStyle:{color:'#e4b95c'}},
           {name:'成交量',type:'bar',xAxisIndex:1,yAxisIndex:1,
+            barCategoryGap:'5%',barMinHeight:1,
             data:volumes.map((value,index)=>({value,itemStyle:{color:
               directions[index]>0?'rgba(239,102,102,.72)':
               directions[index]<0?'rgba(63,194,139,.72)':'rgba(155,169,175,.45)'}}))},
@@ -730,7 +731,7 @@
           {...axis,type:'category',data:dates,boundaryGap:true,
             axisLabel:{show:false}},
           {...axis,type:'category',data:dates,boundaryGap:true,gridIndex:1,
-            axisLabel:{color:'#9ba9af',interval:0,rotate:45,
+            axisLabel:{color:'#9ba9af',hideOverlap:true,
               formatter:value=>value.slice(5)}},
         ],
         yAxis:[
