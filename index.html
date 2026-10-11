@@ -56,6 +56,16 @@
     .empty{padding:34px 18px;border:1px dashed var(--line);border-radius:6px;
       color:var(--muted);text-align:center;background:var(--surface)}
     .signal-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .return-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+      border:1px solid var(--line);border-radius:6px;margin:0 0 12px;
+      background:var(--surface)}
+    .return-kpi{padding:12px 14px;border-right:1px solid var(--line)}
+    .return-kpi:last-child{border-right:0}
+    .return-kpi span{display:block;color:var(--muted);font-size:12px}
+    .return-kpi strong{display:block;margin-top:2px;font-size:20px;
+      font-variant-numeric:tabular-nums}
+    .return-kpi small{display:block;margin-top:2px;color:var(--muted);
+      font-size:11px}
     .search{height:38px;width:min(260px,70vw);border:1px solid var(--line);
       border-radius:5px;background:var(--surface2);color:var(--text);padding:0 10px}
     .segmented{display:flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
@@ -68,8 +78,8 @@
     th,td{padding:10px 12px;border-bottom:1px solid #283238;text-align:right;
       white-space:nowrap;font-variant-numeric:tabular-nums}
     th{position:sticky;top:0;background:#172024;color:var(--muted);font-size:12px}
-    th:nth-child(2),th:nth-child(3),th:nth-child(4),
-    td:nth-child(2),td:nth-child(3),td:nth-child(4){text-align:left}
+    th:nth-child(2),th:nth-child(3),th:nth-child(4),th:nth-child(5),
+    td:nth-child(2),td:nth-child(3),td:nth-child(4),td:nth-child(5){text-align:left}
     tbody tr:last-child td{border-bottom:0}
     tbody tr.vanished{background:rgba(228,185,92,.07)}
     .badge{display:inline-block;border:1px solid #806c3d;border-radius:4px;
@@ -103,6 +113,9 @@
       .top{align-items:flex-start;padding:16px}.actions{gap:8px}.generated{max-width:190px}
       main{padding:18px 12px 36px}.section-head{align-items:flex-start;flex-direction:column}
       .signal-tools{width:100%}.search{width:100%}.chart{height:350px}
+      .return-kpis{grid-template-columns:1fr}
+      .return-kpi{border-right:0;border-bottom:1px solid var(--line)}
+      .return-kpi:last-child{border-bottom:0}
     }
   </style>
 </head>
@@ -133,6 +146,7 @@
             title="下一个交易日" aria-label="下一个交易日">›</button>
         </div>
       </div>
+      <div id="return-kpis" class="return-kpis" aria-label="全天收益汇总"></div>
       <div class="signal-tools">
         <input id="signal-search" class="search" type="search"
           placeholder="代码或名称" aria-label="搜索信号股票">
@@ -288,16 +302,30 @@
         return;
       }
       const dailyReturn = summary.daily_return || {};
+      const totalReturn = Number(dailyReturn.daily_total_return);
+      const longReturn = Number(dailyReturn.long_buy_to_close_return);
+      const shortChange = Number(
+        dailyReturn.short_sell_to_close_price_change);
+      $('#return-kpis').innerHTML = `
+        <div class="return-kpi"><span>全天总收益</span>
+          <strong class="${totalReturn >= 0 ? 'up' : 'down'}">${pct(totalReturn)}</strong>
+          <small>多头收益之和 - 空头价格涨跌之和</small></div>
+        <div class="return-kpi"><span>多头买入至收盘</span>
+          <strong class="${longReturn >= 0 ? 'up' : 'down'}">${pct(longReturn)}</strong>
+          <small>${summary.long_count || 0} 条多头信号</small></div>
+        <div class="return-kpi"><span>空头卖出至收盘价格涨跌</span>
+          <strong class="${shortChange >= 0 ? 'up' : 'down'}">${pct(shortChange)}</strong>
+          <small>${summary.short_count || 0} 条空头信号；总收益中作减项</small></div>`;
       $('#signals-count').textContent =
         `股票 ${summary.stock_count || 0} 只 · 信号 ${summary.count || 0} 条 · 多头 ${summary.long_count || 0} · 空头 ${summary.short_count || 0} · 收盘消失 ${summary.disappeared_count || 0} · 当前筛选 ${rows.length}`;
       $('#signals-count').textContent +=
         ` · 全天总收益 ${pct(dailyReturn.daily_total_return)}`;
       $('#signals-table').innerHTML = `<thead><tr>
-        <th>方向</th><th>时间</th><th>代码</th><th>名称</th>
+        <th>方向</th><th>时间</th><th>代码</th><th>名称</th><th>规则</th>
         <th>强度</th><th>信号价</th><th>信号时涨跌</th>
         <th>收盘价</th><th>收盘涨跌</th><th>信号至收盘</th><th>全天收益</th>
         <th>最高 / 最低</th><th>最大涨 / 跌</th><th>收盘状态</th>
-        <th>规则</th><th>概率</th><th>行业/板块</th><th>来源</th>
+        <th>概率</th><th>行业/板块</th><th>来源</th>
       </tr></thead><tbody>${shown.length ? shown.map(row => {
         const long = row.direction === 1;
         const exitRule = DATA.exit_rules?.[0]?.label || '--';
@@ -306,6 +334,7 @@
           <td>${esc(clock(row.quote_at))}</td>
           <td><button class="stock-link" data-code="${esc(row.code)}">${esc(row.code)}</button></td>
           <td><button class="stock-link" data-code="${esc(row.code)}">${esc(row.name)}</button></td>
+          <td>${esc(exitRule)}（${row.exit_rule_triggered ? '命中' : '未命中'}）</td>
           <td>${row.strength === 'weak' ? '弱' : '强'}</td>
           <td>${price(row.price)}</td>
           <td class="${Number(row.change) >= 0 ? 'up' : 'down'}">${pct(row.change)}</td>
@@ -318,7 +347,6 @@
           <td>${row.disappeared_at_close
             ? `<span class="badge">${long ? '多头' : '空头'}已消失</span>`
             : (row.close_complete ? `${long ? '多头' : '空头'}仍在` : '盘中')}</td>
-          <td>${esc(row.return_rule || '--')} · ${esc(exitRule)}（${row.exit_rule_triggered ? '命中' : '未命中'}）</td>
           <td>${(Number(row.probability) * 100).toFixed(1)}%</td>
           <td>${esc(String(row.industry || '').replace(/^[A-Z]\d{2}/, '') || '--')}</td>
           <td>${esc(sourceName(row.source))}</td>
