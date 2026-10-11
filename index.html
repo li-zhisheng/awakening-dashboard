@@ -308,10 +308,10 @@
       $('#return-kpis').innerHTML = `
         <div class="return-kpi"><span>原始策略当日盈亏</span>
           <strong class="${strategyReturn >= 0 ? 'up' : 'down'}">${pct(strategyDay.return)}</strong>
-          <small>真实1分钟多头买入、空头卖出后的持仓净值</small></div>
+          <small>盘后确认信号的1分钟回放，含未来信息偏差</small></div>
         <div class="return-kpi"><span>当日盈亏金额</span>
           <strong class="${strategyProfit >= 0 ? 'up' : 'down'}">${strategyDay.profit_cny == null ? '--' : `¥${strategyProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`}</strong>
-          <small>按策略100万元初始资金折算</small></div>
+          <small>历史研究按100万元折算，非实盘收益</small></div>
         <div class="return-kpi"><span>累计收益</span>
           <strong class="${cumulativeReturn >= 0 ? 'up' : 'down'}">${pct(strategyDay.cumulative_return)}</strong>
           <small>收盘持仓 ${strategyDay.holdings_end ?? '--'} 只</small></div>
