@@ -1040,7 +1040,11 @@
           || !Array.isArray(data.signals?.rows)) {
         throw new Error('数据结构不兼容');
       }
-      DATA = data;
+      const sharedArchive = DATA?.minute_archive;
+      DATA = sharedArchive
+        ? {...data, minute_archive: sharedArchive}
+        : data;
+      data = DATA;
       const day = String(data.signals.date || '');
       activeDate = day;
       DATE_CACHE.set(day, data);
