@@ -52,28 +52,6 @@
     .section{padding-top:4px}
     .section-head{margin-bottom:12px}
     .section-head h2{font-size:21px}
-    .strategy-overview{margin-bottom:28px;border-top:1px solid var(--line);
-      border-bottom:1px solid var(--line);padding:18px 0}
-    .strategy-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-    .strategy-title h2{font-size:21px}
-    .status-chip{display:inline-flex;align-items:center;height:24px;padding:0 8px;
-      border:1px solid #39727a;border-radius:4px;color:var(--cyan);font-size:11px}
-    .status-chip.warning{border-color:#806c3d;color:var(--amber)}
-    .strategy-meta{margin-top:5px;color:var(--muted);font-size:12px}
-    .strategy-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
-      margin-top:16px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-    .strategy-kpi{padding:13px 14px;border-right:1px solid var(--line)}
-    .strategy-kpi:last-child{border-right:0}
-    .strategy-kpi span{display:block;color:var(--muted);font-size:11px}
-    .strategy-kpi strong{display:block;margin-top:3px;font-size:20px;
-      font-variant-numeric:tabular-nums}
-    .strategy-kpi small{display:block;margin-top:2px;color:var(--muted);font-size:11px}
-    .strategy-boundaries{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
-      gap:18px;margin-top:14px}
-    .strategy-boundary strong{display:block;font-size:12px;color:var(--amber)}
-    .strategy-boundary span{display:block;margin-top:3px;color:var(--muted);font-size:12px}
-    .feed-note{margin-bottom:12px;padding:10px 12px;border-left:3px solid var(--amber);
-      background:#191d1c;color:var(--muted);font-size:12px}
     .up{color:var(--red)}.down{color:var(--green)}
     .empty{padding:34px 18px;border:1px dashed var(--line);border-radius:6px;
       color:var(--muted);text-align:center;background:var(--surface)}
@@ -81,7 +59,6 @@
     .return-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
       border:1px solid var(--line);border-radius:6px;margin:0 0 12px;
       background:var(--surface)}
-    .return-kpis:empty{display:none}
     .return-kpi{padding:12px 14px;border-right:1px solid var(--line)}
     .return-kpi:last-child{border-right:0}
     .return-kpi span{display:block;color:var(--muted);font-size:12px}
@@ -136,11 +113,6 @@
       .top{align-items:flex-start;padding:16px}.actions{gap:8px}.generated{max-width:190px}
       main{padding:18px 12px 36px}.section-head{align-items:flex-start;flex-direction:column}
       .signal-tools{width:100%}.search{width:100%}.chart{height:350px}
-      .strategy-kpis{grid-template-columns:1fr 1fr}
-      .strategy-kpi{border-bottom:1px solid var(--line)}
-      .strategy-kpi:nth-child(2n){border-right:0}
-      .strategy-kpi:last-child{grid-column:1/-1;border-bottom:0}
-      .strategy-boundaries{grid-template-columns:1fr;gap:10px}
       .return-kpis{grid-template-columns:1fr}
       .return-kpi{border-right:0;border-bottom:1px solid var(--line)}
       .return-kpi:last-child{border-bottom:0}
@@ -151,7 +123,7 @@
   <header class="top">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">∩</div>
-      <div><div class="eyebrow">AWAKENING / QUANT</div><h1>最终选股策略</h1></div>
+      <div><div class="eyebrow">AWAKENING / QUANT</div><h1>量化交易</h1></div>
     </div>
     <div class="actions">
       <div id="generated" class="generated" role="status">正在读取数据</div>
@@ -160,21 +132,10 @@
   </header>
 
   <main>
-    <section id="strategy-overview" class="strategy-overview"
-      aria-labelledby="strategy-title">
-      <div class="strategy-title">
-        <h2 id="strategy-title">冻结验证</h2>
-        <span class="status-chip">已冻结</span>
-        <span class="status-chip warning">仅验证选股机会</span>
-      </div>
-      <p id="strategy-meta" class="strategy-meta">正在读取最终策略证据</p>
-      <div id="strategy-kpis" class="strategy-kpis"></div>
-      <div id="strategy-boundaries" class="strategy-boundaries"></div>
-    </section>
     <section class="section" aria-labelledby="signals-title">
       <div class="section-head">
         <div>
-          <h2 id="signals-title">现有盘中监控</h2>
+          <h2 id="signals-title">量化交易信号</h2>
           <span id="signals-count">--</span>
         </div>
         <div class="date-control"><span>交易日</span>
@@ -185,8 +146,7 @@
             title="下一个交易日" aria-label="下一个交易日">›</button>
         </div>
       </div>
-      <div class="feed-note">当前多空监控尚未接入最终 V338 策略，不代表最终策略选股结果。</div>
-      <div id="return-kpis" class="return-kpis"></div>
+      <div id="return-kpis" class="return-kpis" aria-label="原始策略交易日盈亏"></div>
       <div class="signal-tools">
         <input id="signal-search" class="search" type="search"
           placeholder="代码或名称" aria-label="搜索信号股票">
@@ -247,8 +207,6 @@
     const pct = value => isNumber(value)
       ? `${Number(value) >= 0 ? '+' : ''}${(Number(value) * 100).toFixed(2)}%`
       : '--';
-    const rate = value => isNumber(value)
-      ? `${(Number(value) * 100).toFixed(2)}%` : '--';
     const price = value => isNumber(value)
       ? `¥${Number(value).toFixed(2)}` : '--';
     const sourceName = value =>
@@ -285,49 +243,6 @@
     let stockController = null;
     let dailyChartClick = null;
 
-    function renderFinalStrategy() {
-      const strategy = DATA.final_strategy || {};
-      const validation = strategy.validation || {};
-      const audit = strategy.audit || {};
-      const scope = strategy.scope || {};
-      if (strategy.status !== 'frozen') {
-        $('#strategy-meta').textContent = '最终策略冻结证据暂不可用';
-        $('#strategy-kpis').innerHTML = '';
-        $('#strategy-boundaries').innerHTML = '';
-        return;
-      }
-      const coverage = Array.isArray(validation.coverage)
-        ? validation.coverage.map(dayLabel).join(' 至 ') : '--';
-      const interval = Array.isArray(validation.wilson_95)
-        ? validation.wilson_95.map(rate).join(' – ') : '--';
-      $('#strategy-meta').textContent =
-        `${strategy.model} · ${strategy.confidence_rule} · 验证 ${coverage}`
-        + ` · ${validation.complete_calendar_year ? '完整年度' : 'YTD 非完整年度'}`;
-      $('#strategy-kpis').innerHTML = `
-        <div class="strategy-kpi"><span>机会识别率</span>
-          <strong class="up">${rate(validation.hit_rate)}</strong>
-          <small>${validation.hits ?? '--'} / ${validation.audited ?? '--'} · 修复≥10%</small></div>
-        <div class="strategy-kpi"><span>大机会率</span>
-          <strong class="up">${rate(validation.large_opportunity_rate)}</strong>
-          <small>${validation.large_opportunities ?? '--'} 次 · 修复≥15%</small></div>
-        <div class="strategy-kpi"><span>按股票首次信号</span>
-          <strong>${rate(validation.first_signal_hit_rate)}</strong>
-          <small>${validation.first_signal_hits ?? '--'} / ${validation.distinct_codes ?? '--'}，降低重复依赖</small></div>
-        <div class="strategy-kpi"><span>95% 置信区间</span>
-          <strong>${interval}</strong>
-          <small>下界仍低于60%，结论存在统计不确定性</small></div>
-        <div class="strategy-kpi"><span>有效训练窗口</span>
-          <strong>${audit.effective_training_days ?? '--'} 日</strong>
-          <small>${Number(audit.effective_training_rows || 0).toLocaleString('zh-CN')} 行 · 最近样本上限</small></div>`;
-      $('#strategy-boundaries').innerHTML = `
-        <div class="strategy-boundary"><strong>不是交易收益率</strong>
-          <span>指标从信号后的最低价计算至后续收盘，未定义实际买点与卖点。</span></div>
-        <div class="strategy-boundary"><strong>训练与验证目标不同</strong>
-          <span>训练使用${esc(audit.training_target || '--')}；最终验证使用${esc(audit.validation_target || '--')}。</span></div>
-        <div class="strategy-boundary"><strong>尚未接入盘中监控</strong>
-          <span>${scope.entry_validated ? '买点已验证' : '买点未验证'}、${scope.exit_validated ? '卖点已验证' : '卖点未验证'}，当前下方信号不是最终策略输出。</span></div>`;
-    }
-
     function filteredSignals() {
       const query = $('#signal-search').value.trim().toLowerCase();
       return (DATA.signals?.rows || []).filter(row => {
@@ -337,7 +252,6 @@
       });
     }
     function renderSignals() {
-      $('#return-kpis').innerHTML = '';
       const rows = filteredSignals();
       const pages = Math.max(1, Math.ceil(rows.length / signalPageSize));
       signalPage = Math.min(signalPage, pages);
@@ -387,8 +301,27 @@
         $('#signal-next').disabled = signalPage >= pages;
         return;
       }
+      const strategyDay = DATA.strategy?.daily || {};
+      const strategyReturn = Number(strategyDay.return);
+      const strategyProfit = Number(strategyDay.profit_cny);
+      const cumulativeReturn = Number(strategyDay.cumulative_return);
+      $('#return-kpis').innerHTML = `
+        <div class="return-kpi"><span>原始策略当日盈亏</span>
+          <strong class="${strategyReturn >= 0 ? 'up' : 'down'}">${pct(strategyDay.return)}</strong>
+          <small>盘后确认信号的1分钟回放，含未来信息偏差</small></div>
+        <div class="return-kpi"><span>当日盈亏金额</span>
+          <strong class="${strategyProfit >= 0 ? 'up' : 'down'}">${strategyDay.profit_cny == null ? '--' : `¥${strategyProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`}</strong>
+          <small>历史研究按100万元折算，非实盘收益</small></div>
+        <div class="return-kpi"><span>累计收益</span>
+          <strong class="${cumulativeReturn >= 0 ? 'up' : 'down'}">${pct(strategyDay.cumulative_return)}</strong>
+          <small>收盘持仓 ${strategyDay.holdings_end ?? '--'} 只</small></div>
+        <div class="return-kpi"><span>冲高回落尾盘卖出</span>
+          <strong>${strategyDay.rule_sells ?? '--'}</strong>
+          <small>14:56判定 · 15:00收盘价成交</small></div>`;
       $('#signals-count').textContent =
         `股票 ${summary.stock_count || 0} 只 · 信号 ${summary.count || 0} 条 · 多头 ${summary.long_count || 0} · 空头 ${summary.short_count || 0} · 收盘消失 ${summary.disappeared_count || 0} · 当前筛选 ${rows.length}`;
+      $('#signals-count').textContent +=
+        ` · 原始策略当日盈亏 ${pct(strategyDay.return)}`;
       $('#signals-table').innerHTML = `<thead><tr>
         <th>方向</th><th>时间</th><th>代码</th><th>名称</th>
         <th>强度</th><th>信号价</th><th>信号时涨跌</th>
@@ -1156,10 +1089,9 @@
         ? `交易日 ${dayLabel(day)}`
         : '交易日 --';
       $('#signal-through').textContent =
-        data.signals.mode === 'historical_archive'
+        data.signals.mode === 'historical_replay'
           ? `历史5分钟回放 · 非1分钟实盘证据 · 首次多头至 ${stamp(data.signals.observed_through)}`
-          : `现有多空监控观测至 ${stamp(data.signals.observed_through)} · 未接入最终策略`;
-      renderFinalStrategy();
+          : `多空信号观测至 ${stamp(data.signals.observed_through)}`;
       renderDateSelector(data, day);
       renderSignals();
     }
