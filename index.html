@@ -56,6 +56,17 @@
     .empty{padding:34px 18px;border:1px dashed var(--line);border-radius:6px;
       color:var(--muted);text-align:center;background:var(--surface)}
     .signal-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .reversal-section{margin-top:28px;padding-top:24px;border-top:1px solid var(--line)}
+    .reversal-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+      margin-bottom:12px}
+    .filter-select{height:38px;border:1px solid var(--line);border-radius:5px;
+      background:var(--surface2);color:var(--text);padding:0 30px 0 10px}
+    .reversal-table{min-width:1280px}
+    .reversal-table th:nth-child(2),.reversal-table th:nth-child(3),
+    .reversal-table th:nth-child(4),.reversal-table th:nth-child(6),
+    .reversal-table td:nth-child(2),.reversal-table td:nth-child(3),
+    .reversal-table td:nth-child(4),.reversal-table td:nth-child(6){
+      text-align:left}
     .return-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
       border:1px solid var(--line);border-radius:6px;margin:0 0 12px;
       background:var(--surface)}
@@ -113,6 +124,8 @@
       .top{align-items:flex-start;padding:16px}.actions{gap:8px}.generated{max-width:190px}
       main{padding:18px 12px 36px}.section-head{align-items:flex-start;flex-direction:column}
       .signal-tools{width:100%}.search{width:100%}.chart{height:350px}
+      .reversal-tools{width:100%}.reversal-tools .search{width:100%}
+      .filter-select{flex:1;min-width:0}
       .return-kpis{grid-template-columns:1fr}
       .return-kpi{border-right:0;border-bottom:1px solid var(--line)}
       .return-kpi:last-child{border-bottom:0}
@@ -166,6 +179,37 @@
         <button id="signal-prev" type="button">上一页</button>
         <span id="signal-page">--</span>
         <button id="signal-next" type="button">下一页</button>
+      </div>
+    </section>
+
+    <section class="section reversal-section" aria-labelledby="reversals-title">
+      <div class="section-head">
+        <div>
+          <h2 id="reversals-title">跌超 20% 后多头</h2>
+          <span id="reversals-count">正在读取</span>
+        </div>
+      </div>
+      <div class="reversal-tools">
+        <input id="reversal-search" class="search" type="search"
+          placeholder="代码或名称" aria-label="搜索跌超20%后多头股票">
+        <select id="reversal-year" class="filter-select" aria-label="筛选信号年份">
+          <option value="all">全部年份</option>
+          <option value="2026">2026</option>
+          <option value="2024">2024</option>
+        </select>
+        <select id="reversal-status" class="filter-select" aria-label="筛选多头状态">
+          <option value="all">全部状态</option>
+          <option value="retained">核对时仍在</option>
+          <option value="disappeared">核对时已消失</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table id="reversals-table" class="reversal-table"></table>
+      </div>
+      <div class="pagination">
+        <button id="reversal-prev" type="button">上一页</button>
+        <span id="reversal-page">--</span>
+        <button id="reversal-next" type="button">下一页</button>
       </div>
     </section>
 
@@ -238,6 +282,9 @@
     let direction = 'all';
     let signalPage = 1;
     const signalPageSize = 100;
+    let REVERSALS = null;
+    let reversalPage = 1;
+    const reversalPageSize = 50;
     let stockState = null;
     let stockChart = null;
     let stockController = null;
@@ -354,6 +401,97 @@
       $('#signal-page').textContent = `${signalPage} / ${pages}`;
       $('#signal-prev').disabled = signalPage <= 1;
       $('#signal-next').disabled = signalPage >= pages;
+    }
+
+    function reversalSource(row) {
+      if (row.source === '2024_5m_replay') return '2024历史5分钟';
+      if (row.source === '2026_live_1m') return '2026实盘1分钟';
+      return '2026历史5分钟';
+    }
+
+    function reversalStatus(row) {
+      const checkpoint = row.source === '2024_5m_replay' ? '14:55' : '收盘';
+      if (row.retained_at_close === true) {
+        return `<span class="up">${checkpoint}仍在</span>`;
+      }
+      if (row.retained_at_close === false) {
+        const disappeared = row.first_disappeared_time
+          ? ` · ${esc(String(row.first_disappeared_time).replace(
+              /^(\d{2})(\d{2})$/, '$1:$2'))}`
+          : '';
+        return `<span class="badge">${checkpoint}已消失${disappeared}</span>`;
+      }
+      return '--';
+    }
+
+    function filteredReversals() {
+      if (!REVERSALS) return [];
+      const query = $('#reversal-search').value.trim().toLowerCase();
+      const year = $('#reversal-year').value;
+      const status = $('#reversal-status').value;
+      return REVERSALS.rows.filter(row => {
+        if (year !== 'all' && !String(row.long_at).startsWith(year)) return false;
+        if (status === 'retained' && row.retained_at_close !== true) return false;
+        if (status === 'disappeared' && row.retained_at_close !== false) return false;
+        return !query || `${row.code}${row.name}`.toLowerCase().includes(query);
+      });
+    }
+
+    function renderReversals() {
+      const rows = filteredReversals();
+      const pages = Math.max(1, Math.ceil(rows.length / reversalPageSize));
+      reversalPage = Math.min(reversalPage, pages);
+      const shown = rows.slice(
+        (reversalPage - 1) * reversalPageSize,
+        reversalPage * reversalPageSize);
+      const summary = REVERSALS || {};
+      $('#reversals-count').textContent =
+        `事件 ${summary.count || 0} 条 · 股票 ${summary.stock_count || 0} 只`
+        + ` · 核对时仍在 ${summary.retained_at_close_count || 0}`
+        + ` · 当前筛选 ${rows.length}`;
+      $('#reversals-table').innerHTML = `<thead><tr>
+        <th>多头信号日</th><th>多头时机</th><th>代码</th><th>名称</th>
+        <th>累计跌幅</th><th>空头信号日</th><th>空头时间</th>
+        <th>空头价</th><th>多头价</th><th>后续状态</th><th>数据口径</th>
+      </tr></thead><tbody>${shown.length ? shown.map(row => {
+        const longAt = String(row.long_at || '');
+        const shortAt = String(row.short_at || '');
+        return `<tr>
+          <td>${esc(longAt.slice(0, 10))}</td>
+          <td>${esc(longAt.slice(11, 16))}</td>
+          <td>${esc(row.code)}</td>
+          <td>${esc(row.name)}</td>
+          <td class="down">${pct(row.decline_from_short)}</td>
+          <td>${esc(shortAt.slice(0, 10))}</td>
+          <td>${esc(shortAt.slice(11, 16))}</td>
+          <td>${price(row.short_price)}</td>
+          <td>${price(row.long_price)}</td>
+          <td>${reversalStatus(row)}</td>
+          <td>${esc(reversalSource(row))}</td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="11" class="empty">当前筛选没有符合条件的股票</td></tr>'}</tbody>`;
+      $('#reversal-page').textContent = `${reversalPage} / ${pages}`;
+      $('#reversal-prev').disabled = reversalPage <= 1;
+      $('#reversal-next').disabled = reversalPage >= pages;
+    }
+
+    async function loadReversals() {
+      try {
+        const response = await fetch('reversals.json', {cache:'no-cache'});
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (data?.schema !== 'awakening-quant-short20-reversals-v1'
+            || !Array.isArray(data.rows)) {
+          throw new Error('数据结构不兼容');
+        }
+        REVERSALS = data;
+        reversalPage = 1;
+        renderReversals();
+      } catch (error) {
+        $('#reversals-count').textContent = `读取失败 · ${String(error)}`;
+        $('#reversals-table').innerHTML =
+          '<tbody><tr><td class="empty">反转信号数据读取失败</td></tr></tbody>';
+      }
     }
 
     function stockSignals(code) {
@@ -1175,6 +1313,21 @@
     $('#signal-next').addEventListener('click', () => {
       signalPage += 1; renderSignals();
     });
+    $('#reversal-search').addEventListener('input', () => {
+      reversalPage = 1; renderReversals();
+    });
+    $('#reversal-year').addEventListener('change', () => {
+      reversalPage = 1; renderReversals();
+    });
+    $('#reversal-status').addEventListener('change', () => {
+      reversalPage = 1; renderReversals();
+    });
+    $('#reversal-prev').addEventListener('click', () => {
+      reversalPage -= 1; renderReversals();
+    });
+    $('#reversal-next').addEventListener('click', () => {
+      reversalPage += 1; renderReversals();
+    });
     $('#signals-table').addEventListener('click', event => {
       const link = event.target.closest('[data-code]');
       if (link) openStock(link.dataset.code);
@@ -1191,6 +1344,7 @@
       stockChart = null;
     });
     window.addEventListener('resize', () => stockChart?.resize());
+    loadReversals();
     refresh();
   </script>
 </body>
