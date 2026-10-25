@@ -67,6 +67,7 @@
     .reversal-table td:nth-child(2),.reversal-table td:nth-child(3),
     .reversal-table td:nth-child(4),.reversal-table td:nth-child(6){
       text-align:left}
+    .historical-low-table{min-width:1420px}
     .return-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
       border:1px solid var(--line);border-radius:6px;margin:0 0 12px;
       background:var(--surface)}
@@ -213,6 +214,42 @@
       </div>
     </section>
 
+    <section class="section reversal-section"
+      aria-labelledby="historical-lows-title">
+      <div class="section-head">
+        <div>
+          <h2 id="historical-lows-title">历史新低次日上涨</h2>
+          <span id="historical-lows-count">正在读取</span>
+        </div>
+      </div>
+      <div class="reversal-tools">
+        <input id="historical-low-search" class="search" type="search"
+          placeholder="代码或名称" aria-label="搜索历史新低次日上涨股票">
+        <select id="historical-low-month" class="filter-select"
+          aria-label="筛选确认月份">
+          <option value="all">全部月份</option>
+          <option value="202607">2026-07</option>
+          <option value="202608">2026-08</option>
+          <option value="202609">2026-09</option>
+        </select>
+        <select id="historical-low-status" class="filter-select"
+          aria-label="筛选可成交状态">
+          <option value="all">全部状态</option>
+          <option value="executable">15:00 可成交</option>
+          <option value="blocked">15:00 不可成交</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table id="historical-lows-table"
+          class="historical-low-table"></table>
+      </div>
+      <div class="pagination">
+        <button id="historical-low-prev" type="button">上一页</button>
+        <span id="historical-low-page">--</span>
+        <button id="historical-low-next" type="button">下一页</button>
+      </div>
+    </section>
+
     <footer class="foot">
       <span id="signal-date">交易日 --</span>
       <span id="signal-through">多空信号观测 --</span>
@@ -285,6 +322,9 @@
     let REVERSALS = null;
     let reversalPage = 1;
     const reversalPageSize = 50;
+    let HISTORICAL_LOWS = null;
+    let historicalLowPage = 1;
+    const historicalLowPageSize = 50;
     let stockState = null;
     let stockChart = null;
     let stockController = null;
@@ -492,6 +532,93 @@
         $('#reversals-count').textContent = `读取失败 · ${String(error)}`;
         $('#reversals-table').innerHTML =
           '<tbody><tr><td class="empty">反转信号数据读取失败</td></tr></tbody>';
+      }
+    }
+
+    function historicalLowReturn(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return '--';
+      return `<span class="${number >= 0 ? 'up' : 'down'}">${pct(number)}</span>`;
+    }
+
+    function filteredHistoricalLows() {
+      if (!HISTORICAL_LOWS) return [];
+      const query = $('#historical-low-search').value.trim().toLowerCase();
+      const month = $('#historical-low-month').value;
+      const status = $('#historical-low-status').value;
+      return HISTORICAL_LOWS.rows.filter(row => {
+        if (month !== 'all'
+            && !String(row.confirm_day).startsWith(month)) return false;
+        if (status === 'executable' && row.entry_executable !== true) return false;
+        if (status === 'blocked' && row.entry_executable !== false) return false;
+        return !query || `${row.code}${row.name}`.toLowerCase().includes(query);
+      });
+    }
+
+    function renderHistoricalLows() {
+      const rows = filteredHistoricalLows();
+      const pages = Math.max(
+        1, Math.ceil(rows.length / historicalLowPageSize));
+      historicalLowPage = Math.min(historicalLowPage, pages);
+      const shown = rows.slice(
+        (historicalLowPage - 1) * historicalLowPageSize,
+        historicalLowPage * historicalLowPageSize);
+      const summary = HISTORICAL_LOWS || {};
+      $('#historical-lows-count').textContent =
+        `事件 ${summary.count || 0} 条 · 股票 ${summary.stock_count || 0} 只`
+        + ` · 可成交 ${summary.executable_count || 0}`
+        + ` · 当前筛选 ${rows.length}`;
+      $('#historical-lows-table').innerHTML = `<thead><tr>
+        <th>确认日</th><th>代码</th><th>名称</th><th>新低日</th>
+        <th>此前最低</th><th>新低价</th><th>跌破幅度</th>
+        <th>14:55涨幅</th><th>15:00成交价</th><th>成交状态</th>
+        <th>T+1</th><th>T+3</th><th>T+5</th>
+      </tr></thead><tbody>${shown.length ? shown.map(row => {
+        const outcome = row.outcomes || {};
+        return `<tr>
+          <td>${esc(dayLabel(row.confirm_day))}</td>
+          <td><button class="stock-link" data-code="${esc(row.code)}"
+            data-confirm-day="${esc(row.confirm_day)}">${esc(row.code)}</button></td>
+          <td><button class="stock-link" data-code="${esc(row.code)}"
+            data-confirm-day="${esc(row.confirm_day)}">${esc(row.name)}</button></td>
+          <td>${esc(dayLabel(row.break_day))}</td>
+          <td>${price(row.prior_low)}</td>
+          <td>${price(row.break_low)}</td>
+          <td class="down">${pct(row.break_depth)}</td>
+          <td class="up">${pct(row.confirmation_return)}</td>
+          <td>${price(row.entry_price)}</td>
+          <td>${row.entry_executable
+            ? '<span class="up">可成交</span>'
+            : '<span class="badge">不可成交</span>'}</td>
+          <td>${historicalLowReturn(outcome['1']?.close_return)}</td>
+          <td>${historicalLowReturn(outcome['3']?.close_return)}</td>
+          <td>${historicalLowReturn(outcome['5']?.close_return)}</td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="13" class="empty">当前筛选没有符合条件的股票</td></tr>'}</tbody>`;
+      $('#historical-low-page').textContent =
+        `${historicalLowPage} / ${pages}`;
+      $('#historical-low-prev').disabled = historicalLowPage <= 1;
+      $('#historical-low-next').disabled = historicalLowPage >= pages;
+    }
+
+    async function loadHistoricalLows() {
+      try {
+        const response = await fetch(
+          'historical-lows.json', {cache:'no-cache'});
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (data?.schema !== 'awakening-trend-historical-low-recent-v1'
+            || !Array.isArray(data.rows)) {
+          throw new Error('数据结构不兼容');
+        }
+        HISTORICAL_LOWS = data;
+        historicalLowPage = 1;
+        renderHistoricalLows();
+      } catch (error) {
+        $('#historical-lows-count').textContent =
+          `读取失败 · ${String(error)}`;
+        $('#historical-lows-table').innerHTML =
+          '<tbody><tr><td class="empty">历史新低数据读取失败</td></tr></tbody>';
       }
     }
 
@@ -1142,8 +1269,30 @@
       }
     }
 
-    function openStock(code) {
+    function openStock(code, context = null) {
       const signals = stockSignals(code);
+      if (context) {
+        stockState = {
+          code,
+          name: context.name,
+          signals: [],
+          view: 'daily',
+          minute: null,
+          daily: null,
+          date: dayLabel(context.confirm_day),
+        };
+        $('#stock-title').textContent = context.name;
+        $('#stock-code').innerHTML =
+          `<strong>${esc(code)}</strong> · 历史新低 ${esc(dayLabel(context.break_day))}`
+          + `　次日确认 ${esc(dayLabel(context.confirm_day))}`
+          + `　14:55涨幅 ${pct(context.confirmation_return)}`
+          + `　15:00成交价 ${price(context.entry_price)}`;
+        $('#minute-tab').disabled = true;
+        if (!$('#stock-dialog').open) $('#stock-dialog').showModal();
+        if (!stockChart) stockChart = echarts.init($('#stock-chart'));
+        setStockView('daily');
+        return;
+      }
       if (!signals.length) return;
       const summary = signals[0];
       const replay = DATA.signals?.mode === 'historical_replay';
@@ -1329,9 +1478,32 @@
     $('#reversal-next').addEventListener('click', () => {
       reversalPage += 1; renderReversals();
     });
+    $('#historical-low-search').addEventListener('input', () => {
+      historicalLowPage = 1; renderHistoricalLows();
+    });
+    $('#historical-low-month').addEventListener('change', () => {
+      historicalLowPage = 1; renderHistoricalLows();
+    });
+    $('#historical-low-status').addEventListener('change', () => {
+      historicalLowPage = 1; renderHistoricalLows();
+    });
+    $('#historical-low-prev').addEventListener('click', () => {
+      historicalLowPage -= 1; renderHistoricalLows();
+    });
+    $('#historical-low-next').addEventListener('click', () => {
+      historicalLowPage += 1; renderHistoricalLows();
+    });
     $('#signals-table').addEventListener('click', event => {
       const link = event.target.closest('[data-code]');
       if (link) openStock(link.dataset.code);
+    });
+    $('#historical-lows-table').addEventListener('click', event => {
+      const link = event.target.closest('[data-code]');
+      if (!link || !HISTORICAL_LOWS) return;
+      const row = HISTORICAL_LOWS.rows.find(item =>
+        item.code === link.dataset.code
+        && item.confirm_day === link.dataset.confirmDay);
+      if (row) openStock(row.code, row);
     });
     $('#minute-tab').addEventListener('click', () => setStockView('minute'));
     $('#daily-tab').addEventListener('click', () => setStockView('daily'));
@@ -1346,6 +1518,7 @@
     });
     window.addEventListener('resize', () => stockChart?.resize());
     loadReversals();
+    loadHistoricalLows();
     refresh();
   </script>
 </body>
