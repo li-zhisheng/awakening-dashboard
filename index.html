@@ -452,7 +452,8 @@
       $('#reversals-table').innerHTML = `<thead><tr>
         <th>多头信号日</th><th>多头时机</th><th>代码</th><th>名称</th>
         <th>累计跌幅</th><th>空头信号日</th><th>空头时间</th>
-        <th>空头价</th><th>多头价</th><th>后续状态</th><th>数据口径</th>
+        <th>空头价(前复权)</th><th>多头价(前复权)</th>
+        <th>后续状态</th><th>数据口径</th>
       </tr></thead><tbody>${shown.length ? shown.map(row => {
         const longAt = String(row.long_at || '');
         const shortAt = String(row.short_at || '');
