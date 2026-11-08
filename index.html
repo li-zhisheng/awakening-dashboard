@@ -172,6 +172,12 @@
           <button type="button" data-direction="short"
             role="tab" aria-selected="false">空头</button>
         </div>
+        <select id="signal-status" class="filter-select"
+          aria-label="筛选收盘状态">
+          <option value="all">全部状态</option>
+          <option value="retained">收盘仍在</option>
+          <option value="disappeared">收盘已消失</option>
+        </select>
       </div>
       <div class="table-wrap">
         <table id="signals-table"></table>
@@ -294,7 +300,15 @@
       value === 'tencent' ? '腾讯'
       : value === 'sina' ? '新浪'
       : value === 'historical_5m_replay' ? '历史5分钟回放'
+      : value === 'tencent_batch_recovered_opening'
+        ? '腾讯开盘快照恢复'
+      : value === 'baostock_qfq_recovered_close'
+        ? 'BaoStock收盘确认'
       : value || '--';
+    const recoveredRaw = row => [
+      'tencent_batch_recovered_opening',
+      'baostock_qfq_recovered_close',
+    ].includes(row?.source);
     const signalColors = {
       strongLong:'#ef6666',weakLong:'#ef6666',
       strongShort:'#3fc28b',weakShort:'#3fc28b',
@@ -332,9 +346,21 @@
 
     function filteredSignals() {
       const query = $('#signal-search').value.trim().toLowerCase();
+      const status = $('#signal-status').value;
       return (DATA.signals?.rows || []).filter(row => {
         if (direction === 'long' && row.direction !== 1) return false;
         if (direction === 'short' && row.direction !== -1) return false;
+        if (
+          status === 'retained'
+          && (
+            row.close_complete !== true
+            || row.disappeared_at_close !== false
+          )
+        ) return false;
+        if (
+          status === 'disappeared'
+          && row.disappeared_at_close !== true
+        ) return false;
         return !query || `${row.code}${row.name}`.toLowerCase().includes(query);
       });
     }
@@ -406,7 +432,12 @@
           <strong>${strategyDay.rule_sells ?? '--'}</strong>
           <small>14:56判定 · 15:00收盘价成交</small></div>`;
       $('#signals-count').textContent =
-        `股票 ${summary.stock_count || 0} 只 · 信号 ${summary.count || 0} 条 · 多头 ${summary.long_count || 0} · 空头 ${summary.short_count || 0} · 收盘消失 ${summary.disappeared_count || 0} · 当前筛选 ${rows.length}`;
+        `股票 ${summary.stock_count || 0} 只 · 信号 ${summary.count || 0} 条`
+        + ` · 多头 ${summary.long_count || 0}`
+        + ` · 空头 ${summary.short_count || 0}`
+        + ` · 收盘仍在多头 ${summary.retained_long_count || 0}`
+        + ` · 收盘消失 ${summary.disappeared_count || 0}`
+        + ` · 当前筛选 ${rows.length}`;
       $('#signals-count').textContent +=
         ` · 原始策略当日盈亏 ${pct(strategyDay.return)}`;
       $('#signals-table').innerHTML = `<thead><tr>
@@ -422,7 +453,9 @@
           <td>${esc(clock(row.quote_at))}</td>
           <td><button class="stock-link" data-code="${esc(row.code)}">${esc(row.code)}</button></td>
           <td><button class="stock-link" data-code="${esc(row.code)}">${esc(row.name)}</button></td>
-          <td>${row.strength === 'weak' ? '弱' : '强'}</td>
+          <td>${recoveredRaw(row)
+            ? '原始公式'
+            : row.strength === 'weak' ? '弱' : '强'}</td>
           <td>${price(row.price)}</td>
           <td class="${Number(row.change) >= 0 ? 'up' : 'down'}">${pct(row.change)}</td>
           <td>${price(row.close_price)}</td>
@@ -433,7 +466,9 @@
           <td>${row.disappeared_at_close
             ? `<span class="badge">${long ? '多头' : '空头'}已消失</span>`
             : (row.close_complete ? `${long ? '多头' : '空头'}仍在` : '盘中')}</td>
-          <td>${(Number(row.probability) * 100).toFixed(1)}%</td>
+          <td>${recoveredRaw(row)
+            ? '--'
+            : `${(Number(row.probability) * 100).toFixed(1)}%`}</td>
           <td>${esc(String(row.industry || '').replace(/^[A-Z]\d{2}/, '') || '--')}</td>
           <td>${esc(sourceName(row.source))}</td>
         </tr>`;
@@ -1443,6 +1478,9 @@
     $('#date-prev').addEventListener('click', () => loadAdjacentDate(1));
     $('#date-next').addEventListener('click', () => loadAdjacentDate(-1));
     $('#signal-search').addEventListener('input', () => {
+      signalPage = 1; renderSignals();
+    });
+    $('#signal-status').addEventListener('change', () => {
       signalPage = 1; renderSignals();
     });
     document.querySelectorAll('[data-direction]').forEach(button =>
